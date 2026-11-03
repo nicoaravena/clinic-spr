@@ -16,7 +16,7 @@ Decisions:
 
 ## Progress
 
-Current step: **1.1** (awaiting review and first commit)
+Current step: **1.2**
 
 ## How each step works
 
