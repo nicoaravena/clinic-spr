@@ -1,3 +1,4 @@
+pub mod appointment;
 pub mod email;
 pub mod ids;
 pub mod schedule;

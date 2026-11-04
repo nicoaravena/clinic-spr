@@ -16,7 +16,7 @@ Decisions:
 
 ## Progress
 
-Current step: **1.3**
+Current step: **1.4**
 
 ## How each step works
 
@@ -52,7 +52,7 @@ Dependencies point inward: `api -> app -> domain`, and `db -> app -> domain`.
 | 1.1 | `git init`, workspace, `domain` crate, one test | cargo, crates, modules, `#[test]` |
 | 1.2 | `ClinicId`, `PractitionerId`, `Email` with validation | structs, newtypes, privacy, `Result`, derive |
 | 1.3 | `TimeSlot` (start before end, `overlaps`) | borrowing, `&self`, operators, chrono |
-| 1.4 | `AppointmentType` with a fixed duration, `AppointmentStatus` | enums, `match`, `Option` |
+| 1.4 | Clinic-defined `AppointmentType` with a duration, `AppointmentStatus` | enums, `match`, `Option` |
 | 1.5 | `WorkingHours` (slot fits within a practitioner's hours) | `Vec`, slices, iterators, closures |
 | 1.6 | `Schedule::book` (no overlap, within hours) | `thiserror`, `?`, ownership in APIs |
 | 1.7 | `Role` and permissions (only practitioners touch clinical notes) | traits, types that make bad states unrepresentable |
@@ -63,6 +63,8 @@ Dependencies point inward: `api -> app -> domain`, and `db -> app -> domain`.
 Delivers `POST /appointments` and `GET /practitioners/{id}/agenda`, working through curl.
 Concepts: traits as ports, generics vs `dyn`, `Arc`, `Mutex`, async/await, axum extractors, serde,
 and mapping domain errors to HTTP status codes.
+Appointment types are defined per clinic, so this milestone also needs somewhere to store and look
+them up.
 
 ### M3: Postgres with one schema per clinic
 
