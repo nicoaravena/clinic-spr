@@ -48,3 +48,11 @@ Across the platform:
 ## What a solution must answer
 
 How should the platform be structured so that it serves clinics of every size from one product, keeps each clinic's data isolated, prevents customers from affecting each other, meets regulatory obligations, and remains economical to run as the number of clinics grows?
+
+## Optional extras
+
+- Add docs that allow to be rendered in a static page (like gitbooks)
+- Add CI/CD using gitlab-ci and/or github actions
+- Add use of containers (docker or k8s)
+- Add infrastructure as a code (terraform)
+- Add opentelemetry (netdata, grafana or other)
