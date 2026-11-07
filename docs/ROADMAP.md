@@ -13,10 +13,12 @@ Decisions:
 - **Stack:** axum + tokio + sqlx + chrono.
 - **Layout:** Cargo workspace whose crate boundaries keep the domain free of I/O.
 - **Order:** tests before code, and pure domain logic before async and SQL.
+- **Time:** the domain works only in UTC. A clinic, its staff and its patients can each be in a
+  different time zone, so time zones are handled at the edges.
 
 ## Progress
 
-Current step: **1.4**
+Current step: **1.5**
 
 ## How each step works
 
@@ -53,7 +55,7 @@ Dependencies point inward: `api -> app -> domain`, and `db -> app -> domain`.
 | 1.2 | `ClinicId`, `PractitionerId`, `Email` with validation | structs, newtypes, privacy, `Result`, derive |
 | 1.3 | `TimeSlot` (start before end, `overlaps`) | borrowing, `&self`, operators, chrono |
 | 1.4 | Clinic-defined `AppointmentType` with a duration, `AppointmentStatus` | enums, `match`, `Option` |
-| 1.5 | `WorkingHours` (slot fits within a practitioner's hours) | `Vec`, slices, iterators, closures |
+| 1.5 | `WorkingHours` as dated UTC shifts (slot fits within a practitioner's hours) | `Vec`, slices, iterators, closures |
 | 1.6 | `Schedule::book` (no overlap, within hours) | `thiserror`, `?`, ownership in APIs |
 | 1.7 | `Role` and permissions (only practitioners touch clinical notes) | traits, types that make bad states unrepresentable |
 | 1.8 | `ClinicalNote` that keeps versions on correction | lifetimes, immutability by design |
@@ -65,6 +67,9 @@ Concepts: traits as ports, generics vs `dyn`, `Arc`, `Mutex`, async/await, axum 
 and mapping domain errors to HTTP status codes.
 Appointment types are defined per clinic, so this milestone also needs somewhere to store and look
 them up.
+`WorkingHours` holds dated UTC shifts, so something outside the domain must create them, for example
+by expanding a weekly template using the time zone the hours were defined in. That's where daylight
+saving changes must be handled correctly.
 
 ### M3: Postgres with one schema per clinic
 

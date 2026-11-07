@@ -45,6 +45,10 @@ impl TimeSlot {
     pub fn overlaps(&self, other: &TimeSlot) -> bool {
         self.start < other.end && other.start < self.end
     }
+
+    pub fn contains(&self, other: &TimeSlot) -> bool {
+        self.start <= other.start && other.end <= self.end
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

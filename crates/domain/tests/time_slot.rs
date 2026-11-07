@@ -69,6 +69,46 @@ fn slots_separated_by_a_gap_do_not_overlap() {
 }
 
 #[test]
+fn a_slot_contains_one_strictly_inside_it() {
+    assert!(slot(at(9, 0), at(11, 0)).contains(&slot(at(9, 30), at(10, 0))));
+}
+
+#[test]
+fn a_slot_contains_an_identical_slot() {
+    assert!(slot(at(9, 0), at(10, 0)).contains(&slot(at(9, 0), at(10, 0))));
+}
+
+#[test]
+fn a_slot_contains_one_sharing_its_start() {
+    assert!(slot(at(9, 0), at(10, 0)).contains(&slot(at(9, 0), at(9, 30))));
+}
+
+#[test]
+fn a_slot_contains_one_sharing_its_end() {
+    assert!(slot(at(9, 0), at(10, 0)).contains(&slot(at(9, 30), at(10, 0))));
+}
+
+#[test]
+fn a_slot_does_not_contain_one_starting_before_it() {
+    assert!(!slot(at(9, 0), at(10, 0)).contains(&slot(at(8, 30), at(9, 30))));
+}
+
+#[test]
+fn a_slot_does_not_contain_one_ending_after_it() {
+    assert!(!slot(at(9, 0), at(10, 0)).contains(&slot(at(9, 30), at(10, 30))));
+}
+
+#[test]
+fn a_slot_does_not_contain_one_fully_outside_it() {
+    assert!(!slot(at(9, 0), at(10, 0)).contains(&slot(at(11, 0), at(11, 30))));
+}
+
+#[test]
+fn a_smaller_slot_does_not_contain_a_larger_one() {
+    assert!(!slot(at(9, 30), at(10, 0)).contains(&slot(at(9, 0), at(11, 0))));
+}
+
+#[test]
 fn error_has_a_readable_message() {
     assert_eq!(
         TimeSlotError::EndNotAfterStart.to_string(),
