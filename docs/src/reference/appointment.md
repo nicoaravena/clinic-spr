@@ -12,6 +12,7 @@ What kind of appointment is booked, and where it is in its lifecycle.
 - `AppointmentTypeError`: `EmptyName`, `NonPositiveDuration`
 - `AppointmentStatus`: `Scheduled`, `Completed`, `Cancelled`, `NoShow`;
   `transition_to`
+- `Appointment` (step 1.6): `appointment_type`, `slot`, `status`
 
 ## Rules and how they are enforced
 
@@ -21,6 +22,7 @@ What kind of appointment is booked, and where it is in its lifecycle.
 | Each type has a positive duration | `NonPositiveDuration` |
 | Only valid types exist | Private fields, `compile_fail` doctest |
 | Only allowed status moves happen | `transition_to` returns `None` otherwise |
+| Every appointment passed the booking rules | Private fields, `pub(crate)` constructor used only by [`Schedule::book`](schedule.md), `compile_fail` doctest |
 
 ## Status transitions
 

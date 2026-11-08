@@ -13,8 +13,9 @@ needed:
 | `crates/db` | sqlx adapters, migrations, tenant access | M3 |
 
 Dependencies point inward: `api -> app -> domain` and `db -> app -> domain`.
-The domain depends on nothing else in the workspace, and its only external
-dependency is `chrono`, without the system clock.
+The domain depends on nothing else in the workspace. Its only external
+dependencies are `chrono`, without the system clock, and `thiserror`, which
+generates error boilerplate at compile time.
 
 ## Rules that hold across the domain
 
@@ -25,7 +26,8 @@ dependency is `chrono`, without the system clock.
   rules hold. Each module proves its fields are private with a
   `compile_fail` doctest.
 - **Errors are enums.** Each module has its own error enum, which implements
-  `Display` and `std::error::Error`.
+  `Display` and `std::error::Error`, by hand (steps 1.2 to 1.5) or with
+  `thiserror` (from step 1.6).
 - **No clock, no I/O.** Callers pass in times and data.
 
 ## Modules
@@ -37,8 +39,7 @@ dependency is `chrono`, without the system clock.
 | [time_slot](time_slot.md) | `TimeSlot` | 1.3 |
 | [appointment](appointment.md) | `AppointmentType`, `AppointmentStatus` | 1.4 |
 | [working_hours](working_hours.md) | `WorkingHours` | 1.5 |
-
-`schedule` holds only the step 1.1 placeholder and is replaced in step 1.6.
+| [schedule](schedule.md) | `Schedule`, `Appointment` (in `appointment`) | 1.6 |
 
 ## API docs
 

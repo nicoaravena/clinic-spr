@@ -1,14 +1,102 @@
-pub fn end_minute(start_minute: u32, duration_minutes: u32) -> u32 {
-    start_minute + duration_minutes
+//! One practitioner's working hours and the appointments booked in them.
+//!
+//! [`Schedule::book`] is the only way to add an appointment. It accepts one only if it fits inside
+//! a single shift and doesn't overlap an appointment already booked.
+//!
+//! The fields are private, so the only way to build a schedule is through [`Schedule::new`]:
+//!
+//! ```compile_fail,E0451
+//! use clinic_domain::schedule::Schedule;
+//! use clinic_domain::working_hours::WorkingHours;
+//!
+//! Schedule {
+//!     hours: WorkingHours::new(Vec::new()).unwrap(),
+//!     appointments: Vec::new(),
+//! };
+//! ```
+
+use chrono::{DateTime, Utc};
+use thiserror::Error;
+
+use crate::appointment::{Appointment, AppointmentType};
+use crate::time_slot::TimeSlot;
+use crate::working_hours::WorkingHours;
+
+/// One practitioner's working hours and their appointments, sorted by start.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Schedule {
+    hours: WorkingHours,
+    appointments: Vec<Appointment>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn end_minute_adds_duration_to_start() {
-        let result = end_minute(540, 30);
-        assert_eq!(result, 570);
+impl Schedule {
+    /// An empty schedule for the given working hours.
+    pub fn new(hours: WorkingHours) -> Self {
+        Self {
+            hours,
+            appointments: Vec::new(),
+        }
     }
+
+    /// The booked appointments, sorted by start.
+    pub fn appointments(&self) -> &[Appointment] {
+        &self.appointments
+    }
+
+    /// Books an appointment of `appointment_type` starting at `start`.
+    ///
+    /// The checks run in this order, and the first one that fails decides the error:
+    ///
+    /// 1. The appointment must end within the range of dates chrono can represent.
+    /// 2. It must fit inside a single shift of the working hours.
+    /// 3. It must not overlap an appointment already booked.
+    ///
+    /// On failure the schedule is unchanged.
+    pub fn book(
+        &mut self,
+        start: DateTime<Utc>,
+        appointment_type: AppointmentType,
+    ) -> Result<&Appointment, BookingError> {
+        let slot = appointment_type
+            .slot_starting_at(start)
+            .ok_or(BookingError::OutOfRange)?;
+
+        if !self.hours.contains(&slot) {
+            return Err(BookingError::OutsideWorkingHours);
+        }
+        if let Some(existing) = self
+            .appointments
+            .iter()
+            .find(|appointment| appointment.slot().overlaps(&slot))
+        {
+            return Err(BookingError::Overlaps {
+                existing: existing.slot(),
+            });
+        }
+
+        let index = self
+            .appointments
+            .partition_point(|appointment| appointment.slot().start() <= slot.start());
+        self.appointments
+            .insert(index, Appointment::scheduled(appointment_type, slot));
+
+        Ok(&self.appointments[index])
+    }
+}
+
+/// Why [`Schedule::book`] refused a booking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum BookingError {
+    /// The appointment would end after the latest time chrono can represent.
+    #[error("appointment would end after the latest supported time")]
+    OutOfRange,
+    /// No single shift of the working hours contains the appointment.
+    #[error("appointment is outside the practitioner's working hours")]
+    OutsideWorkingHours,
+    /// The appointment overlaps one already booked.
+    #[error("appointment overlaps an existing appointment")]
+    Overlaps {
+        /// The slot of the appointment already booked.
+        existing: TimeSlot,
+    },
 }

@@ -12,6 +12,23 @@
 //!     duration: TimeDelta::zero(),
 //! };
 //! ```
+//!
+//! An [`Appointment`] can only be created by booking it through
+//! [`Schedule::book`](crate::schedule::Schedule::book), which checks the booking rules:
+//!
+//! ```compile_fail,E0451
+//! use chrono::{TimeDelta, TimeZone, Utc};
+//! use clinic_domain::appointment::{Appointment, AppointmentStatus, AppointmentType};
+//!
+//! let start = Utc.with_ymd_and_hms(2026, 3, 2, 9, 0, 0).unwrap();
+//! let appointment_type = AppointmentType::new("Consultation", TimeDelta::minutes(30)).unwrap();
+//!
+//! Appointment {
+//!     slot: appointment_type.slot_starting_at(start).unwrap(),
+//!     appointment_type,
+//!     status: AppointmentStatus::Scheduled,
+//! };
+//! ```
 
 use std::error::Error;
 use std::fmt;
@@ -85,6 +102,40 @@ impl fmt::Display for AppointmentTypeError {
 }
 
 impl Error for AppointmentTypeError {}
+
+/// A booked appointment: what kind it is, when it happens, and where it is in its lifecycle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Appointment {
+    appointment_type: AppointmentType,
+    slot: TimeSlot,
+    status: AppointmentStatus,
+}
+
+impl Appointment {
+    /// A new appointment in the `Scheduled` status. The caller must have checked the booking rules.
+    pub(crate) fn scheduled(appointment_type: AppointmentType, slot: TimeSlot) -> Self {
+        Self {
+            appointment_type,
+            slot,
+            status: AppointmentStatus::Scheduled,
+        }
+    }
+
+    /// The kind of appointment that was booked.
+    pub fn appointment_type(&self) -> &AppointmentType {
+        &self.appointment_type
+    }
+
+    /// When the appointment happens.
+    pub fn slot(&self) -> TimeSlot {
+        self.slot
+    }
+
+    /// Where the appointment is in its lifecycle.
+    pub fn status(&self) -> AppointmentStatus {
+        self.status
+    }
+}
 
 /// Where an appointment is in its lifecycle.
 ///

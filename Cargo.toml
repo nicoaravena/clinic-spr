@@ -1,3 +1,28 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = [
+    "crates/*",
+]
+
+[workspace.lints.clippy]
+all = { level = "allow", priority = -2 }
+correctness = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+exhaustive_enums = "warn"
+exhaustive_structs = "warn"
+manual_non_exhaustive = "warn"
+
+[workspace.lints.rust]
+missing_docs = "warn"
+rust_2018_idioms = "warn"
+unreachable_pub = "warn"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://gitlab.com/nicoaravena/clinic-spr"
+rust-version = "1.88.0" # Keep in sync with installation.md and .github/workflows/main.yml
+
+[workspace.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+thiserror = "2"

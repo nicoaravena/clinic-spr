@@ -11,6 +11,7 @@
   - [1.3 TimeSlot](steps/1.3-time-slot.md)
   - [1.4 Appointment types and status](steps/1.4-appointment-types.md)
   - [1.5 Working hours](steps/1.5-working-hours.md)
+  - [1.6 Schedule and booking](steps/1.6-schedule.md)
 
 # Reference
 
@@ -20,6 +21,7 @@
   - [time_slot](reference/time_slot.md)
   - [appointment](reference/appointment.md)
   - [working_hours](reference/working_hours.md)
+  - [schedule](reference/schedule.md)
 
 ---
 
