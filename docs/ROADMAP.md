@@ -28,9 +28,12 @@ Current step: **1.5**
    `cargo clippy --all-targets -- -D warnings`, `cargo test`, and confirms the expected tests ran.
 3. **The agent explains the step:** what changed, the Rust concepts involved, pointers to The Rust
    Book, and the design choices worth questioning.
-4. **The developer reviews** the code and asks for changes.
-5. **The developer commits** under their own name, with Conventional Commits.
-6. **Hard stop.** The next step starts only when the developer asks for it.
+4. **The agent records the step in the book** (`docs/src/`): a step page in `steps/`, a new or
+   updated page in `reference/`, glossary terms, and doc comments on new public items. Then it
+   checks that `mdbook build docs` and `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps` pass.
+5. **The developer reviews** the code and asks for changes.
+6. **The developer commits** under their own name, with Conventional Commits.
+7. **Hard stop.** The next step starts only when the developer asks for it.
 
 ## Target structure (grows as needed, not scaffolded up front)
 
@@ -41,6 +44,7 @@ crates/app/             use cases and repository traits (from M2)
 crates/db/              sqlx adapters, migrations, tenant access (from M3)
 crates/api/             axum handlers, the binary, composition root (from M2)
 docs/ROADMAP.md         this file
+docs/book.toml, src/    the learning book (mdBook): step journal, reference, glossary
 ```
 
 Dependencies point inward: `api -> app -> domain`, and `db -> app -> domain`.

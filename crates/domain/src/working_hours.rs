@@ -19,12 +19,16 @@ use std::fmt;
 
 use crate::time_slot::TimeSlot;
 
+/// The shifts one practitioner works, sorted and separated by gaps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkingHours {
     shifts: Vec<TimeSlot>,
 }
 
 impl WorkingHours {
+    /// Sorts the shifts by start, then fails if any two overlap or touch.
+    ///
+    /// An empty list is allowed and accepts no slot.
     pub fn new(mut shifts: Vec<TimeSlot>) -> Result<Self, WorkingHoursError> {
         shifts.sort_by_key(|shift| shift.start());
 
@@ -43,13 +47,16 @@ impl WorkingHours {
         &self.shifts
     }
 
+    /// Whether a single shift fully contains `slot`.
     pub fn contains(&self, slot: &TimeSlot) -> bool {
         self.shifts.iter().any(|shift| shift.contains(slot))
     }
 }
 
+/// Why [`WorkingHours::new`] rejected its input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkingHoursError {
+    /// Two shifts overlap, or one ends exactly when the next starts.
     ShiftsNotSeparated,
 }
 

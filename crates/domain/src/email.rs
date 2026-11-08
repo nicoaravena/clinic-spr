@@ -1,3 +1,8 @@
+//! An email address that has been checked and normalized.
+//!
+//! The only way to get an [`Email`] is [`Email::parse`], so holding one means the address passed
+//! validation.
+
 use std::error::Error;
 use std::fmt;
 
@@ -8,6 +13,10 @@ const MAX_LENGTH: usize = 254;
 pub struct Email(String);
 
 impl Email {
+    /// Trims and lowercases `input`, then checks it.
+    ///
+    /// The address must be non-empty, at most 254 bytes long, and shaped like `local@domain.tld`
+    /// with no whitespace. This is a basic shape check, not full RFC 5322.
     pub fn parse(input: &str) -> Result<Self, EmailError> {
         let address = input.trim().to_lowercase();
 
@@ -24,6 +33,7 @@ impl Email {
         Ok(Self(address))
     }
 
+    /// The normalized address.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -50,10 +60,14 @@ fn is_well_formed(address: &str) -> bool {
         && domain.split('.').all(|label| !label.is_empty())
 }
 
+/// Why [`Email::parse`] rejected its input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmailError {
+    /// Nothing was left after trimming.
     Empty,
+    /// Longer than 254 bytes.
     TooLong,
+    /// Not shaped like `local@domain.tld`.
     InvalidFormat,
 }
 

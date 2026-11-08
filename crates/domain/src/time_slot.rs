@@ -26,6 +26,7 @@ pub struct TimeSlot {
 }
 
 impl TimeSlot {
+    /// Fails unless `start` is strictly before `end`.
     pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Self, TimeSlotError> {
         if start >= end {
             return Err(TimeSlotError::EndNotAfterStart);
@@ -34,25 +35,31 @@ impl TimeSlot {
         Ok(Self { start, end })
     }
 
+    /// When the slot starts (inclusive).
     pub fn start(&self) -> DateTime<Utc> {
         self.start
     }
 
+    /// When the slot ends (exclusive).
     pub fn end(&self) -> DateTime<Utc> {
         self.end
     }
 
+    /// Whether the two slots share any time. Back-to-back slots don't overlap.
     pub fn overlaps(&self, other: &TimeSlot) -> bool {
         self.start < other.end && other.start < self.end
     }
 
+    /// Whether `other` lies entirely within this slot. A slot contains itself.
     pub fn contains(&self, other: &TimeSlot) -> bool {
         self.start <= other.start && other.end <= self.end
     }
 }
 
+/// Why [`TimeSlot::new`] rejected its input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimeSlotError {
+    /// The end was equal to or before the start.
     EndNotAfterStart,
 }
 

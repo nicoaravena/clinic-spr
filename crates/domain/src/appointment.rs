@@ -20,6 +20,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 
 use crate::time_slot::TimeSlot;
 
+/// A kind of appointment a clinic offers, such as "Consultation", with a fixed duration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppointmentType {
     name: String,
@@ -27,6 +28,7 @@ pub struct AppointmentType {
 }
 
 impl AppointmentType {
+    /// Trims `name`, then fails if it is empty or if `duration` isn't positive.
     pub fn new(name: &str, duration: TimeDelta) -> Result<Self, AppointmentTypeError> {
         let name = name.trim();
 
@@ -43,14 +45,18 @@ impl AppointmentType {
         })
     }
 
+    /// The trimmed name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// How long an appointment of this type lasts. Always positive.
     pub fn duration(&self) -> TimeDelta {
         self.duration
     }
 
+    /// The slot an appointment of this type would take if it started at `start`.
+    ///
     /// Returns `None` if the slot would end outside the range of dates chrono can represent.
     pub fn slot_starting_at(&self, start: DateTime<Utc>) -> Option<TimeSlot> {
         let end = start.checked_add_signed(self.duration)?;
@@ -59,9 +65,12 @@ impl AppointmentType {
     }
 }
 
+/// Why [`AppointmentType::new`] rejected its input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppointmentTypeError {
+    /// The name was empty or only whitespace.
     EmptyName,
+    /// The duration was zero or negative.
     NonPositiveDuration,
 }
 
@@ -77,11 +86,18 @@ impl fmt::Display for AppointmentTypeError {
 
 impl Error for AppointmentTypeError {}
 
+/// Where an appointment is in its lifecycle.
+///
+/// Every appointment starts as `Scheduled` and moves once to one of the final statuses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppointmentStatus {
+    /// Booked and not yet resolved.
     Scheduled,
+    /// The patient was seen. Final.
     Completed,
+    /// Called off before it happened. Final.
     Cancelled,
+    /// The patient didn't turn up. Final.
     NoShow,
 }
 
