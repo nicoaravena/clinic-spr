@@ -20,6 +20,21 @@ The book has two parts. Both are meant to be used.
 The [Glossary](glossary.md) defines both domain terms (shift, slot) and Rust
 terms (newtype, invariant).
 
+## Running the clinic
+
+From the repository root:
+
+```sh
+cargo run -p clinic
+```
+
+It prints a scripted day at one clinic: staff, appointment types, working
+hours, bookings that succeed and bookings that are refused, and who may
+access what. Every step extends that day, so the output grows with the
+project. The full expected output is in
+`crates/clinic/tests/expected-output.txt`, and a test checks it on every
+`cargo test`.
+
 ## Building the book
 
 You need [mdBook](https://rust-lang.github.io/mdBook/), installed once with:

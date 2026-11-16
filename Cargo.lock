@@ -18,6 +18,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinic"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clinic-domain",
+]
+
+[[package]]
 name = "clinic-domain"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,32 @@
+Clinic 1 opens on Monday 2026-03-02. All times are UTC.
+
+[1.2] Staff
+  Practitioner 1 registered as ana@example.com
+  Email "ana@example" refused: email address has an invalid format
+
+[1.3] Time slots
+  Slot 10:00-09:00 refused: time slot end must be after its start
+
+[1.4] Appointment types
+  Consultation lasts 30 min
+  Follow-up lasts 15 min
+  Check-up lasting 0 min refused: appointment type duration must be positive
+
+[1.5] Working hours
+  Practitioner 1 works 09:00-12:00
+  Practitioner 1 works 13:00-17:00
+
+[1.6] Booking
+  Consultation at 09:00 booked for 09:00-09:30
+  Follow-up at 09:15 refused: appointment overlaps an existing appointment (09:00-09:30)
+  Consultation at 11:45 refused: appointment is outside the practitioner's working hours
+  Follow-up at 13:00 booked for 13:00-13:15
+  Agenda for practitioner 1:
+    09:00-09:30 Consultation (Scheduled)
+    13:00-13:15 Follow-up (Scheduled)
+
+[1.7] Access
+  Receptionist asks for clinical content: refused: role may not access clinical content
+  Administrator asks for clinical content: refused: role may not access clinical content
+  Administrator asks for the audit log: granted
+  Practitioner 1 asks for clinical content: granted to practitioner 1

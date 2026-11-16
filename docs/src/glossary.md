@@ -36,15 +36,22 @@
 
 - **Associated const**: a constant declared in a trait that each
   implementation must provide, such as `Capability::NAME`.
+- **Binary crate**: a crate with a `main` function that compiles to a
+  program you can run. `clinic` is one; `clinic-domain` is a library.
 - **Compile-fail doctest**: a code example in a doc comment, marked
   `compile_fail`, that passes only if it fails to compile. Used here to
   prove that fields are private.
+- **Composition root**: the one place where the app's parts are created
+  and wired together. Here, `main` in `crates/clinic`.
 - **Crate**: the unit Rust compiles: a library or a binary. `clinic-domain`
   is a library crate.
 - **Derive**: `#[derive(...)]` asks the compiler to write standard trait
   implementations, such as `Debug` or `PartialEq`, for a type.
 - **Derive macro**: a library-provided `derive`, such as `thiserror`'s
   `Error`, that generates code for a type at compile time.
+- **Golden file**: a file holding the exact output a program must produce.
+  A test compares each run against it. Here,
+  `crates/clinic/tests/expected-output.txt`.
 - **Half-open interval**: a range that includes its start and excludes its
   end. Back-to-back slots don't overlap.
 - **Integration test**: a test in a crate's `tests/` directory. It is
@@ -65,6 +72,9 @@
   implement, such as `Capability`.
 - **Trait bound**: a requirement on a generic type, such as
   `C: Capability`, meaning "any type that implements `Capability`".
+- **Trait object**: `dyn Trait`, a value whose concrete type is known only
+  at runtime, used behind a pointer such as `Box`. `Box<dyn Error>` holds
+  any error.
 - **Value object**: a value defined entirely by its contents, with no
   identity of its own. Two equal emails are the same email.
 - **Workspace**: a set of crates that share one `Cargo.lock` and one

@@ -24,16 +24,20 @@ Current step: **1.7**
 
 1. **The agent writes the tests first**, then the code, keeping each step small enough to read in
    one sitting.
-2. **The agent runs the checks:** `cargo fmt --check`,
+2. **The agent extends the running clinic:** `main` in `crates/clinic` is one scripted day that
+   grows with every step. The agent adds what the new step makes possible, runs
+   `cargo run -p clinic`, and updates `crates/clinic/tests/expected-output.txt`. The diff of that
+   file shows what changed in the running app.
+3. **The agent runs the checks:** `cargo fmt --check`,
    `cargo clippy --all-targets -- -D warnings`, `cargo test`, and confirms the expected tests ran.
-3. **The agent explains the step:** what changed, the Rust concepts involved, pointers to The Rust
+4. **The agent explains the step:** what changed, the Rust concepts involved, pointers to The Rust
    Book, and the design choices worth questioning.
-4. **The agent records the step in the book** (`docs/src/`): a step page in `steps/`, a new or
+5. **The agent records the step in the book** (`docs/src/`): a step page in `steps/`, a new or
    updated page in `reference/`, glossary terms, and doc comments on new public items. Then it
    checks that `mdbook build docs` and `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps` pass.
-5. **The developer reviews** the code and asks for changes.
-6. **The developer commits** under their own name, with Conventional Commits.
-7. **Hard stop.** The next step starts only when the developer asks for it.
+6. **The developer reviews** the code and asks for changes.
+7. **The developer commits** under their own name, with Conventional Commits.
+8. **Hard stop.** The next step starts only when the developer asks for it.
 
 ## Target structure (grows as needed, not scaffolded up front)
 
@@ -42,12 +46,14 @@ Cargo.toml              workspace
 crates/domain/          entities, value objects, rules; no I/O dependencies
 crates/app/             use cases and repository traits (from M2)
 crates/db/              sqlx adapters, migrations, tenant access (from M3)
-crates/api/             axum handlers, the binary, composition root (from M2)
+crates/api/             axum handlers, as a library (from M2)
+crates/clinic/          the binary and composition root: a scripted day until M2, then the server
 docs/ROADMAP.md         this file
 docs/book.toml, src/    the learning book (mdBook): step journal, reference, glossary
 ```
 
-Dependencies point inward: `api -> app -> domain`, and `db -> app -> domain`.
+Dependencies point inward: `api -> app -> domain`, and `db -> app -> domain`. Only `clinic` depends
+on all of them, to wire them together.
 
 ## Milestones
 
@@ -67,6 +73,8 @@ Dependencies point inward: `api -> app -> domain`, and `db -> app -> domain`.
 ### M2: First HTTP slice (in-memory storage)
 
 Delivers `POST /appointments` and `GET /practitioners/{id}/agenda`, working through curl.
+The `clinic` binary switches from its scripted day to serving HTTP, and the scripted day becomes a
+curl walkthrough.
 Concepts: traits as ports, generics vs `dyn`, `Arc`, `Mutex`, async/await, axum extractors, serde,
 and mapping domain errors to HTTP status codes.
 Appointment types are defined per clinic, so this milestone also needs somewhere to store and look
@@ -136,7 +144,8 @@ routing from `ClinicId` to a pool, so a large clinic can move to its own databas
 
 ## Verification
 
-- **Every step:** fmt, clippy and tests pass, and the code is reviewed.
+- **Every step:** fmt, clippy and tests pass, `cargo run -p clinic` shows the new behavior, and the
+  code is reviewed.
 - **M2 onward:** the milestone ends with a real run of the binary, exercised with curl.
 - **M3 onward:** integration tests run against real Postgres, including the cross-clinic isolation
   test.

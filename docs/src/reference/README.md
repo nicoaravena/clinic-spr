@@ -2,17 +2,19 @@
 
 ## Crates
 
-Today the workspace has one crate. The roadmap adds the others when they are
-needed:
+Today the workspace has two crates. The roadmap adds the others when they
+are needed:
 
 | Crate | Holds | Arrives in |
 |---|---|---|
 | `crates/domain` (`clinic-domain`) | entities, value objects, rules; no I/O | M1 (now) |
+| `crates/clinic` (`clinic`) | the binary and composition root; a scripted day until M2 | M1 (now) |
 | `crates/app` | use cases and repository traits | M2 |
-| `crates/api` | axum handlers, the binary, composition root | M2 |
+| `crates/api` | axum handlers, as a library | M2 |
 | `crates/db` | sqlx adapters, migrations, tenant access | M3 |
 
 Dependencies point inward: `api -> app -> domain` and `db -> app -> domain`.
+Only `clinic` depends on all of them, to wire them together.
 The domain depends on nothing else in the workspace. Its only external
 dependencies are `chrono`, without the system clock, and `thiserror`, which
 generates error boilerplate at compile time.

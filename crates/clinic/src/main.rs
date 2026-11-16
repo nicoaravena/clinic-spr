@@ -1,0 +1,127 @@
+//! The clinic app. Until M2 it runs a scripted day at one clinic, and each roadmap step extends the
+//! script to show what that step added. From M2 it becomes the server.
+//!
+//! The day uses fixed UTC times and no clock, so every run prints the same output.
+//! `tests/expected-output.txt` holds that output.
+
+use std::error::Error;
+
+use chrono::{DateTime, TimeDelta, TimeZone, Utc};
+use clinic_domain::access::{AuditAccess, ClinicalAccess, Role};
+use clinic_domain::appointment::AppointmentType;
+use clinic_domain::email::Email;
+use clinic_domain::ids::{ClinicId, PractitionerId};
+use clinic_domain::schedule::{BookingError, Schedule};
+use clinic_domain::time_slot::TimeSlot;
+use clinic_domain::working_hours::WorkingHours;
+
+/// Runs the scripted day. An error that the script doesn't expect ends the run with exit code 1.
+fn main() -> Result<(), Box<dyn Error>> {
+    let span = |slot: TimeSlot| {
+        format!(
+            "{}-{}",
+            slot.start().format("%H:%M"),
+            slot.end().format("%H:%M"),
+        )
+    };
+
+    let clinic = ClinicId::new(1);
+    println!(
+        "Clinic {} opens on {}. All times are UTC.",
+        clinic.value(),
+        at(0, 0).format("%A %Y-%m-%d"),
+    );
+
+    println!("\n[1.2] Staff");
+    let ana = PractitionerId::new(1);
+    let ana_email = Email::parse("ana@example.com")?;
+    println!(
+        "  Practitioner {} registered as {}",
+        ana.value(),
+        ana_email.as_str(),
+    );
+    if let Err(error) = Email::parse("ana@example") {
+        println!("  Email \"ana@example\" refused: {error}");
+    }
+
+    println!("\n[1.3] Time slots");
+    if let Err(error) = TimeSlot::new(at(10, 0), at(9, 0)) {
+        println!("  Slot 10:00-09:00 refused: {error}");
+    }
+
+    println!("\n[1.4] Appointment types");
+    let consultation = AppointmentType::new("Consultation", TimeDelta::minutes(30))?;
+    let follow_up = AppointmentType::new("Follow-up", TimeDelta::minutes(15))?;
+    for appointment_type in [&consultation, &follow_up] {
+        println!(
+            "  {} lasts {} min",
+            appointment_type.name(),
+            appointment_type.duration().num_minutes(),
+        );
+    }
+    if let Err(error) = AppointmentType::new("Check-up", TimeDelta::zero()) {
+        println!("  Check-up lasting 0 min refused: {error}");
+    }
+
+    println!("\n[1.5] Working hours");
+    let hours = WorkingHours::new(vec![
+        TimeSlot::new(at(9, 0), at(12, 0))?,
+        TimeSlot::new(at(13, 0), at(17, 0))?,
+    ])?;
+    for shift in hours.shifts() {
+        println!("  Practitioner {} works {}", ana.value(), span(*shift));
+    }
+
+    println!("\n[1.6] Booking");
+    let mut schedule = Schedule::new(hours);
+    let requests = [
+        (at(9, 0), &consultation),
+        (at(9, 15), &follow_up),
+        (at(11, 45), &consultation),
+        (at(13, 0), &follow_up),
+    ];
+    for (start, appointment_type) in requests {
+        let request = format!("{} at {}", appointment_type.name(), start.format("%H:%M"),);
+        match schedule.book(start, appointment_type.clone()) {
+            Ok(appointment) => println!("  {request} booked for {}", span(appointment.slot())),
+            Err(error @ BookingError::Overlaps { existing }) => {
+                println!("  {request} refused: {error} ({})", span(existing));
+            }
+            Err(error) => println!("  {request} refused: {error}"),
+        }
+    }
+    println!("  Agenda for practitioner {}:", ana.value());
+    for appointment in schedule.appointments() {
+        println!(
+            "    {} {} ({:?})",
+            span(appointment.slot()),
+            appointment.appointment_type().name(),
+            appointment.status(),
+        );
+    }
+
+    println!("\n[1.7] Access");
+    for (who, role) in [
+        ("Receptionist", Role::Receptionist),
+        ("Administrator", Role::Administrator),
+    ] {
+        if let Err(denied) = role.grant::<ClinicalAccess>() {
+            println!("  {who} asks for clinical content: refused: {denied}");
+        }
+    }
+    Role::Administrator.grant::<AuditAccess>()?;
+    println!("  Administrator asks for the audit log: granted");
+    let clinical = Role::Practitioner(ana).grant::<ClinicalAccess>()?;
+    println!(
+        "  Practitioner {} asks for clinical content: granted to practitioner {}",
+        ana.value(),
+        clinical.practitioner().value(),
+    );
+
+    Ok(())
+}
+
+/// A time on the scripted day, Monday 2026-03-02, in UTC.
+fn at(hour: u32, minute: u32) -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 3, 2, hour, minute, 0).unwrap()
+}

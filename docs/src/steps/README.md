@@ -11,7 +11,14 @@ page has the same sections:
 4. **Design choices worth questioning.** Decisions that could have gone
    another way, and why they went this way.
 5. **Tests.** What the tests pin down.
-6. **Commits.** Where to find the step in `git log`.
+6. **See it run.** What the step added to the scripted day in `crates/clinic`,
+   with the new output lines from `cargo run -p clinic`.
+7. **Commits.** Where to find the step in `git log`.
+
+Pages for steps 1.1 to 1.7 were written before the runnable clinic existed,
+so they have no **See it run** section. The
+[interlude](interlude-running-the-clinic.md) shows the whole day as it was
+when the clinic binary arrived.
 
 Code snippets are copied from the source when the step was written. If they
 differ from the source later, the source is right.
