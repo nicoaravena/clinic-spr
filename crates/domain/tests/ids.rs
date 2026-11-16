@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 
-use clinic_domain::ids::{ClinicId, PractitionerId};
+use clinic_domain::ids::{ClinicId, PatientId, PractitionerId};
 
 #[test]
 fn id_exposes_the_value_it_was_created_with() {
     assert_eq!(ClinicId::new(7).value(), 7);
     assert_eq!(PractitionerId::new(9).value(), 9);
+    assert_eq!(PatientId::new(11).value(), 11);
 }
 
 #[test]

@@ -18,7 +18,7 @@ Decisions:
 
 ## Progress
 
-Current step: **1.7**
+Current step: **1.8** (M1 complete)
 
 ## How each step works
 

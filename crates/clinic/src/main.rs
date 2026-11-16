@@ -9,8 +9,9 @@ use std::error::Error;
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use clinic_domain::access::{AuditAccess, ClinicalAccess, Role};
 use clinic_domain::appointment::AppointmentType;
+use clinic_domain::clinical_note::ClinicalNote;
 use clinic_domain::email::Email;
-use clinic_domain::ids::{ClinicId, PractitionerId};
+use clinic_domain::ids::{ClinicId, PatientId, PractitionerId};
 use clinic_domain::schedule::{BookingError, Schedule};
 use clinic_domain::time_slot::TimeSlot;
 use clinic_domain::working_hours::WorkingHours;
@@ -117,6 +118,43 @@ fn main() -> Result<(), Box<dyn Error>> {
         ana.value(),
         clinical.practitioner().value(),
     );
+
+    println!("\n[1.8] Clinical notes");
+    let patient = PatientId::new(1);
+    let mut note = ClinicalNote::write(&clinical, patient, "Mild fever.", at(9, 30))?;
+    println!(
+        "  Practitioner {} writes a note for patient {} at 09:30",
+        ana.value(),
+        patient.value(),
+    );
+    note.correct(&clinical, "Mild fever, 38.2 C.", at(9, 45))?;
+    println!("  Practitioner {} corrects it at 09:45", ana.value());
+    let refused_corrections = [
+        ("with the same text", "Mild fever, 38.2 C.", at(10, 0)),
+        ("dated 09:00", "No fever.", at(9, 0)),
+    ];
+    for (what, text, written_at) in refused_corrections {
+        if let Err(error) = note.correct(&clinical, text, written_at) {
+            println!("  Correction {what} refused: {error}");
+        }
+    }
+    let ben = PractitionerId::new(2);
+    let ben_clinical = Role::Practitioner(ben).grant::<ClinicalAccess>()?;
+    if let Err(error) = note.correct(&ben_clinical, "No fever.", at(10, 0)) {
+        println!(
+            "  Practitioner {} corrects it: refused: {error}",
+            ben.value()
+        );
+    }
+    println!("  History of the note, oldest first:");
+    for version in note.history(&clinical) {
+        println!(
+            "    {} by practitioner {}: {}",
+            version.written_at().format("%H:%M"),
+            version.author().value(),
+            version.text(),
+        );
+    }
 
     Ok(())
 }

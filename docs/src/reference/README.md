@@ -36,13 +36,14 @@ generates error boilerplate at compile time.
 
 | Module | Main types | Step |
 |---|---|---|
-| [ids](ids.md) | `ClinicId`, `PractitionerId` | 1.2 |
+| [ids](ids.md) | `ClinicId`, `PractitionerId`, `PatientId` (1.8) | 1.2 |
 | [email](email.md) | `Email` | 1.2 |
 | [time_slot](time_slot.md) | `TimeSlot` | 1.3 |
 | [appointment](appointment.md) | `AppointmentType`, `AppointmentStatus` | 1.4 |
 | [working_hours](working_hours.md) | `WorkingHours` | 1.5 |
 | [schedule](schedule.md) | `Schedule`, `Appointment` (in `appointment`) | 1.6 |
 | [access](access.md) | `Role`, `Capability`, `ClinicalAccess` | 1.7 |
+| [clinical_note](clinical_note.md) | `ClinicalNote`, `NoteVersion` | 1.8 |
 
 ## API docs
 

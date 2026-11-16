@@ -17,6 +17,12 @@
   invisible to every other clinic.
 - **Clinical content**: clinical notes and other medical information about a
   patient. Only practitioners may read or write it.
+- **Clinical note**: a practitioner's note about a patient. It is never
+  overwritten: each correction adds a new version.
+- **Correction**: a new version of a clinical note, written by its author.
+  The earlier versions are kept.
+- **Patient**: a person a clinic treats. Clinical notes are about a
+  patient.
 - **Practitioner**: a member of a clinic's staff who sees patients and has an
   agenda.
 - **Role**: what a member of a clinic's staff does there (practitioner,
@@ -29,6 +35,8 @@
   (excluded).
 - **Tenant**: a customer whose data is kept apart from every other
   customer's. Here, a clinic.
+- **Version**: one state of a clinical note: its text, its author and when
+  it was written. A version never changes.
 - **Working hours**: all of a practitioner's shifts. A booking must fit
   inside one shift.
 
@@ -38,6 +46,9 @@
   implementation must provide, such as `Capability::NAME`.
 - **Binary crate**: a crate with a `main` function that compiles to a
   program you can run. `clinic` is one; `clinic-domain` is a library.
+- **Borrow checker**: the part of the compiler that enforces borrowing
+  rules: many `&` or one `&mut` at a time, and no reference outliving its
+  value.
 - **Compile-fail doctest**: a code example in a doc comment, marked
   `compile_fail`, that passes only if it fails to compile. Used here to
   prove that fields are private.
@@ -58,11 +69,18 @@
   compiled as a separate crate and can only use the public API.
 - **Invariant**: a rule that is always true for every value of a type, such
   as "start is before end".
+- **Lifetime**: the span during which a reference is valid, written `'a`.
+  The compiler checks that no reference outlives the value it points to.
+- **Lifetime elision**: rules that let the compiler fill in lifetimes you
+  don't write. A method's returned reference gets the lifetime of `&self`.
 - **Move**: passing a value by value hands over ownership. The caller can't
   use it afterwards unless it cloned it first. `Schedule::book` moves the
   appointment type into the new appointment.
 - **Newtype**: a tuple struct with one field that wraps another type, to give
   it a distinct type and its own rules. `ClinicId(u64)` is one.
+- **Precise capturing**: `+ use<'a>` on an `impl Trait` return type, which
+  lists the lifetimes the hidden type may borrow. Without it, edition 2024
+  captures every lifetime in scope.
 - **`?` operator**: unwraps an `Ok` or `Some`, or returns the `Err` or
   `None` from the current function early.
 - **Smart constructor**: a function such as `new` or `parse` that checks its

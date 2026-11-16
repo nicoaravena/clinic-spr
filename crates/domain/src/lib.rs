@@ -5,6 +5,7 @@
 
 pub mod access;
 pub mod appointment;
+pub mod clinical_note;
 pub mod email;
 pub mod ids;
 pub mod schedule;

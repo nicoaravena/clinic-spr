@@ -14,6 +14,7 @@
   - [1.6 Schedule and booking](steps/1.6-schedule.md)
   - [1.7 Roles and access](steps/1.7-roles-and-access.md)
   - [Interlude: a runnable clinic](steps/interlude-running-the-clinic.md)
+  - [1.8 Clinical notes](steps/1.8-clinical-notes.md)
 
 # Reference
 
@@ -25,6 +26,7 @@
   - [working_hours](reference/working_hours.md)
   - [schedule](reference/schedule.md)
   - [access](reference/access.md)
+  - [clinical_note](reference/clinical_note.md)
 
 ---
 

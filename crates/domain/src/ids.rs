@@ -24,6 +24,22 @@ impl ClinicId {
     }
 }
 
+/// Identifies a patient within a clinic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PatientId(u64);
+
+impl PatientId {
+    /// Wraps a raw value. Any `u64` is accepted.
+    pub fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// The raw value, for storage or display.
+    pub fn value(self) -> u64 {
+        self.0
+    }
+}
+
 /// Identifies a practitioner within a clinic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PractitionerId(u64);

@@ -10,6 +10,7 @@ Typed identifiers, so the compiler rejects an ID of the wrong kind.
 
 - `ClinicId`: `new`, `value`
 - `PractitionerId`: `new`, `value`
+- `PatientId`: `new`, `value` (added in [step 1.8](../steps/1.8-clinical-notes.md))
 
 ## Rules and how they are enforced
 

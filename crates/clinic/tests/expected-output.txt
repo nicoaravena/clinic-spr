@@ -30,3 +30,13 @@ Clinic 1 opens on Monday 2026-03-02. All times are UTC.
   Administrator asks for clinical content: refused: role may not access clinical content
   Administrator asks for the audit log: granted
   Practitioner 1 asks for clinical content: granted to practitioner 1
+
+[1.8] Clinical notes
+  Practitioner 1 writes a note for patient 1 at 09:30
+  Practitioner 1 corrects it at 09:45
+  Correction with the same text refused: correction doesn't change the note
+  Correction dated 09:00 refused: correction is dated before the latest version
+  Practitioner 2 corrects it: refused: only the note's author may correct it
+  History of the note, oldest first:
+    09:30 by practitioner 1: Mild fever.
+    09:45 by practitioner 1: Mild fever, 38.2 C.

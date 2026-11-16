@@ -45,9 +45,9 @@ choosing their role happen outside the domain (M4).
 
 ## Not yet
 
-- Nothing requires a capability yet. `ClinicalNote` (step 1.8) will take
-  `&ClinicalAccess`, and `Schedule::book` may take `&ScheduleAccess` once
-  there is a caller (M2/M4).
+- Only [`ClinicalNote`](clinical_note.md) requires a capability so far: it
+  takes `&ClinicalAccess`. `Schedule::book` may take `&ScheduleAccess` once
+  there is a caller (M2/M4), and `AuditAccess` waits for the audit log (M5).
 - Support staff are a separate principal, arriving in M6.
 
 [api]: ../../../target/doc/clinic_domain/access/index.html
