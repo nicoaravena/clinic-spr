@@ -12,7 +12,8 @@ What kind of appointment is booked, and where it is in its lifecycle.
 - `AppointmentTypeError`: `EmptyName`, `NonPositiveDuration`
 - `AppointmentStatus`: `Scheduled`, `Completed`, `Cancelled`, `NoShow`;
   `transition_to`
-- `Appointment` (step 1.6): `appointment_type`, `slot`, `status`
+- `Appointment` (step 1.6): `patient` (step 2.1), `appointment_type`,
+  `slot`, `status`
 
 ## Rules and how they are enforced
 

@@ -22,7 +22,7 @@ One practitioner's working hours and the appointments booked in them.
 
 ## Semantics
 
-`book(start, appointment_type)` builds the slot from the type's duration,
+`book(patient, start, appointment_type)` builds the slot from the type's duration,
 then checks, in this order, and stops at the first failure:
 
 1. The slot ends within chrono's range (`OutOfRange`).
@@ -37,6 +37,8 @@ because slots are half-open.
 ## Not yet
 
 - Cancelled appointments still block their slot; there is no cancel yet.
-- No way to rebuild a schedule from stored appointments (needed in M2).
+- No way to rebuild a schedule from stored appointments. The in-memory
+  adapter of step 2.1 stores whole `Schedule` values, so this is needed only
+  when the database arrives in M3.
 
 [api]: ../../../target/doc/clinic_domain/schedule/index.html

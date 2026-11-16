@@ -19,11 +19,13 @@
 //! ```compile_fail,E0451
 //! use chrono::{TimeDelta, TimeZone, Utc};
 //! use clinic_domain::appointment::{Appointment, AppointmentStatus, AppointmentType};
+//! use clinic_domain::ids::PatientId;
 //!
 //! let start = Utc.with_ymd_and_hms(2026, 3, 2, 9, 0, 0).unwrap();
 //! let appointment_type = AppointmentType::new("Consultation", TimeDelta::minutes(30)).unwrap();
 //!
 //! Appointment {
+//!     patient: PatientId::new(1),
 //!     slot: appointment_type.slot_starting_at(start).unwrap(),
 //!     appointment_type,
 //!     status: AppointmentStatus::Scheduled,
@@ -35,6 +37,7 @@ use std::fmt;
 
 use chrono::{DateTime, TimeDelta, Utc};
 
+use crate::ids::PatientId;
 use crate::time_slot::TimeSlot;
 
 /// A kind of appointment a clinic offers, such as "Consultation", with a fixed duration.
@@ -103,9 +106,11 @@ impl fmt::Display for AppointmentTypeError {
 
 impl Error for AppointmentTypeError {}
 
-/// A booked appointment: what kind it is, when it happens, and where it is in its lifecycle.
+/// A booked appointment: who it is for, what kind it is, when it happens, and where it is in its
+/// lifecycle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Appointment {
+    patient: PatientId,
     appointment_type: AppointmentType,
     slot: TimeSlot,
     status: AppointmentStatus,
@@ -113,12 +118,22 @@ pub struct Appointment {
 
 impl Appointment {
     /// A new appointment in the `Scheduled` status. The caller must have checked the booking rules.
-    pub(crate) fn scheduled(appointment_type: AppointmentType, slot: TimeSlot) -> Self {
+    pub(crate) fn scheduled(
+        patient: PatientId,
+        appointment_type: AppointmentType,
+        slot: TimeSlot,
+    ) -> Self {
         Self {
+            patient,
             appointment_type,
             slot,
             status: AppointmentStatus::Scheduled,
         }
+    }
+
+    /// The patient the appointment is for.
+    pub fn patient(&self) -> PatientId {
+        self.patient
     }
 
     /// The kind of appointment that was booked.

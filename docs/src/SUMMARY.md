@@ -15,6 +15,7 @@
   - [1.7 Roles and access](steps/1.7-roles-and-access.md)
   - [Interlude: a runnable clinic](steps/interlude-running-the-clinic.md)
   - [1.8 Clinical notes](steps/1.8-clinical-notes.md)
+  - [2.1 The app crate and ports](steps/2.1-app-and-ports.md)
 
 # Reference
 
@@ -27,6 +28,7 @@
   - [schedule](reference/schedule.md)
   - [access](reference/access.md)
   - [clinical_note](reference/clinical_note.md)
+  - [app (crate)](reference/app.md)
 
 ---
 

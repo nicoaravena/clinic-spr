@@ -19,6 +19,7 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 use crate::appointment::{Appointment, AppointmentType};
+use crate::ids::PatientId;
 use crate::time_slot::TimeSlot;
 use crate::working_hours::WorkingHours;
 
@@ -43,7 +44,7 @@ impl Schedule {
         &self.appointments
     }
 
-    /// Books an appointment of `appointment_type` starting at `start`.
+    /// Books an appointment of `appointment_type` for `patient`, starting at `start`.
     ///
     /// The checks run in this order, and the first one that fails decides the error:
     ///
@@ -54,6 +55,7 @@ impl Schedule {
     /// On failure the schedule is unchanged.
     pub fn book(
         &mut self,
+        patient: PatientId,
         start: DateTime<Utc>,
         appointment_type: AppointmentType,
     ) -> Result<&Appointment, BookingError> {
@@ -77,8 +79,10 @@ impl Schedule {
         let index = self
             .appointments
             .partition_point(|appointment| appointment.slot().start() <= slot.start());
-        self.appointments
-            .insert(index, Appointment::scheduled(appointment_type, slot));
+        self.appointments.insert(
+            index,
+            Appointment::scheduled(patient, appointment_type, slot),
+        );
 
         Ok(&self.appointments[index])
     }

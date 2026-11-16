@@ -1,5 +1,5 @@
-//! The clinic app. Until M2 it runs a scripted day at one clinic, and each roadmap step extends the
-//! script to show what that step added. From M2 it becomes the server.
+//! The clinic app. Until step 2.5 it runs a scripted day at one clinic, and each roadmap step
+//! extends the script to show what that step added. In step 2.5 it becomes the server.
 //!
 //! The day uses fixed UTC times and no clock, so every run prints the same output.
 //! `tests/expected-output.txt` holds that output.
@@ -7,7 +7,10 @@
 use std::error::Error;
 
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
-use clinic_domain::access::{AuditAccess, ClinicalAccess, Role};
+use clinic_app::booking::{BookingRequest, book_appointment};
+use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemorySchedules};
+use clinic_app::ports::ScheduleRepository;
+use clinic_domain::access::{AuditAccess, ClinicalAccess, Role, ScheduleAccess};
 use clinic_domain::appointment::AppointmentType;
 use clinic_domain::clinical_note::ClinicalNote;
 use clinic_domain::email::Email;
@@ -74,7 +77,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     println!("\n[1.6] Booking");
-    let mut schedule = Schedule::new(hours);
+    let patient = PatientId::new(1);
+    let mut schedule = Schedule::new(hours.clone());
     let requests = [
         (at(9, 0), &consultation),
         (at(9, 15), &follow_up),
@@ -83,7 +87,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     ];
     for (start, appointment_type) in requests {
         let request = format!("{} at {}", appointment_type.name(), start.format("%H:%M"),);
-        match schedule.book(start, appointment_type.clone()) {
+        match schedule.book(patient, start, appointment_type.clone()) {
             Ok(appointment) => println!("  {request} booked for {}", span(appointment.slot())),
             Err(error @ BookingError::Overlaps { existing }) => {
                 println!("  {request} refused: {error} ({})", span(existing));
@@ -120,7 +124,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     println!("\n[1.8] Clinical notes");
-    let patient = PatientId::new(1);
     let mut note = ClinicalNote::write(&clinical, patient, "Mild fever.", at(9, 30))?;
     println!(
         "  Practitioner {} writes a note for patient {} at 09:30",
@@ -154,6 +157,58 @@ fn main() -> Result<(), Box<dyn Error>> {
             version.author().value(),
             version.text(),
         );
+    }
+
+    println!("\n[2.1] Booking through the app");
+    let mut schedules = InMemorySchedules::new();
+    schedules.save(clinic, ana, Schedule::new(hours));
+    let mut types = InMemoryAppointmentTypes::new();
+    types.add(clinic, consultation.clone())?;
+    types.add(clinic, follow_up.clone())?;
+    if let Err(error) = types.add(clinic, consultation.clone()) {
+        println!(
+            "  Clinic {} adds Consultation again: refused: {error}",
+            clinic.value()
+        );
+    }
+    let reception: ScheduleAccess = Role::Receptionist.grant()?;
+    let other_clinic = ClinicId::new(2);
+    types.add(other_clinic, consultation.clone())?;
+    let requests = [
+        (clinic, "Consultation", at(10, 0)),
+        (clinic, "Check-up", at(10, 30)),
+        (clinic, "Follow-up", at(10, 15)),
+        (other_clinic, "Consultation", at(11, 0)),
+    ];
+    for (at_clinic, appointment_type, start) in requests {
+        let request = format!(
+            "Clinic {} books {appointment_type} with practitioner {} at {}",
+            at_clinic.value(),
+            ana.value(),
+            start.format("%H:%M"),
+        );
+        let booking = BookingRequest {
+            clinic: at_clinic,
+            practitioner: ana,
+            patient,
+            appointment_type,
+            start,
+        };
+        match book_appointment(&mut schedules, &types, &reception, booking) {
+            Ok(appointment) => println!("  {request}: booked for {}", span(appointment.slot())),
+            Err(error) => println!("  {request}: refused: {error}"),
+        }
+    }
+    if let Some(saved) = schedules.get(clinic, ana) {
+        println!("  Saved agenda for practitioner {}:", ana.value());
+        for appointment in saved.appointments() {
+            println!(
+                "    {} {} for patient {}",
+                span(appointment.slot()),
+                appointment.appointment_type().name(),
+                appointment.patient().value(),
+            );
+        }
     }
 
     Ok(())

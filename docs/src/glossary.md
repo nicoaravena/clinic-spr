@@ -2,8 +2,8 @@
 
 ## Domain
 
-- **Appointment**: a booked visit: its appointment type, its slot and its
-  status. Created only by booking it in a schedule.
+- **Appointment**: a booked visit: its patient, its appointment type, its
+  slot and its status. Created only by booking it in a schedule.
 - **Appointment type**: a kind of appointment a clinic offers, such as
   "Consultation", with a fixed duration. Each clinic defines its own.
 - **Appointment status**: where an appointment is in its lifecycle:
@@ -21,8 +21,8 @@
   overwritten: each correction adds a new version.
 - **Correction**: a new version of a clinical note, written by its author.
   The earlier versions are kept.
-- **Patient**: a person a clinic treats. Clinical notes are about a
-  patient.
+- **Patient**: a person a clinic treats. Appointments are for a patient,
+  and clinical notes are about one.
 - **Practitioner**: a member of a clinic's staff who sees patients and has an
   agenda.
 - **Role**: what a member of a clinic's staff does there (practitioner,
@@ -42,6 +42,8 @@
 
 ## Rust and design
 
+- **Adapter**: a type that implements a port for one technology, such as
+  `InMemorySchedules`. Swapping the adapter doesn't change the use case.
 - **Associated const**: a constant declared in a trait that each
   implementation must provide, such as `Capability::NAME`.
 - **Binary crate**: a crate with a `main` function that compiles to a
@@ -60,6 +62,13 @@
   implementations, such as `Debug` or `PartialEq`, for a type.
 - **Derive macro**: a library-provided `derive`, such as `thiserror`'s
   `Error`, that generates code for a type at compile time.
+- **Dynamic dispatch**: calling a method through a trait object
+  (`&dyn Trait`), where the method to run is looked up at runtime. One
+  compiled copy serves every type.
+- **Generic**: a function or type with a type parameter, such as
+  `book_appointment<S: ScheduleRepository>`. The compiler makes one copy per
+  concrete type used (*monomorphization*), so calls are dispatched
+  statically.
 - **Golden file**: a file holding the exact output a program must produce.
   A test compares each run against it. Here,
   `crates/clinic/tests/expected-output.txt`.
@@ -78,11 +87,18 @@
   appointment type into the new appointment.
 - **Newtype**: a tuple struct with one field that wraps another type, to give
   it a distinct type and its own rules. `ClinicId(u64)` is one.
+- **Port**: a trait that says what a use case needs from the outside world,
+  without saying how it is done, such as `ScheduleRepository`.
 - **Precise capturing**: `+ use<'a>` on an `impl Trait` return type, which
   lists the lifetimes the hidden type may borrow. Without it, edition 2024
   captures every lifetime in scope.
+- **Repository**: a port that stores and finds one kind of domain object,
+  as if it were an in-memory collection.
 - **`?` operator**: unwraps an `Ok` or `Some`, or returns the `Err` or
   `None` from the current function early.
+- **`Sized` and `?Sized`**: `Sized` types have a size known at compile
+  time. Type parameters are `Sized` unless marked `?Sized`, which lets them
+  be a trait object such as `dyn ScheduleRepository`.
 - **Smart constructor**: a function such as `new` or `parse` that checks its
   input and is the only way to build a type. Combined with private fields,
   it makes invalid values impossible to represent.
@@ -93,6 +109,9 @@
 - **Trait object**: `dyn Trait`, a value whose concrete type is known only
   at runtime, used behind a pointer such as `Box`. `Box<dyn Error>` holds
   any error.
+- **Use case**: one thing the application does for a user, such as
+  booking an appointment, written as a function over ports. It lives in
+  `crates/app`.
 - **Value object**: a value defined entirely by its contents, with no
   identity of its own. Two equal emails are the same email.
 - **Workspace**: a set of crates that share one `Cargo.lock` and one

@@ -22,7 +22,17 @@ name = "clinic"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "clinic-app",
  "clinic-domain",
+]
+
+[[package]]
+name = "clinic-app"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clinic-domain",
+ "thiserror",
 ]
 
 [[package]]

@@ -15,10 +15,13 @@ Decisions:
 - **Order:** tests before code, and pure domain logic before async and SQL.
 - **Time:** the domain works only in UTC. A clinic, its staff and its patients can each be in a
   different time zone, so time zones are handled at the edges.
+- **Ports:** repository traits are sync in M2. They become async in M3, when sqlx needs it.
+- **Tenant over HTTP:** until login arrives in M4, a request names its clinic in an `X-Clinic-Id`
+  header. In M4 the token takes its place and the routes don't change.
 
 ## Progress
 
-Current step: **1.8** (M1 complete)
+Current step: **2.1**
 
 ## How each step works
 
@@ -73,6 +76,15 @@ on all of them, to wire them together.
 ### M2: First HTTP slice (in-memory storage)
 
 Delivers `POST /appointments` and `GET /practitioners/{id}/agenda`, working through curl.
+
+| Step | Build | Rust concepts |
+|---|---|---|
+| 2.1 | `app` crate: `ScheduleRepository` and `AppointmentTypes` ports, in-memory adapters, `book_appointment` use case; appointments record their patient | traits as ports, generics vs `dyn`, `#[from]` error wrapping, `HashMap` |
+| 2.2 | `practitioner_agenda` query (appointments in a UTC range) | iterators over borrowed data, `impl Trait` returns |
+| 2.3 | Weekly template to dated UTC shifts in the clinic's time zone, daylight saving included (adds `chrono-tz`) | `chrono-tz`, `LocalResult`, ambiguous and missing local times |
+| 2.4 | `api` crate: axum, `POST /appointments` with `X-Clinic-Id`, serde DTOs, domain errors to HTTP status codes | async/await, tokio, `Arc<Mutex<_>>`, `Send`/`Sync`, extractors, serde |
+| 2.5 | `GET /practitioners/{id}/agenda`; the `clinic` binary serves HTTP; the scripted day becomes a curl walkthrough | composition root, graceful shutdown, integration tests over HTTP |
+
 The `clinic` binary switches from its scripted day to serving HTTP, and the scripted day becomes a
 curl walkthrough.
 Concepts: traits as ports, generics vs `dyn`, `Arc`, `Mutex`, async/await, axum extractors, serde,

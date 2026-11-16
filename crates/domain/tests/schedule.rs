@@ -1,5 +1,6 @@
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use clinic_domain::appointment::{AppointmentStatus, AppointmentType};
+use clinic_domain::ids::PatientId;
 use clinic_domain::schedule::{BookingError, Schedule};
 use clinic_domain::time_slot::TimeSlot;
 use clinic_domain::working_hours::WorkingHours;
@@ -16,6 +17,10 @@ fn slot(start: DateTime<Utc>, end: DateTime<Utc>) -> TimeSlot {
     TimeSlot::new(start, end).unwrap()
 }
 
+fn patient() -> PatientId {
+    PatientId::new(1)
+}
+
 fn consultation() -> AppointmentType {
     AppointmentType::new("Consultation", TimeDelta::minutes(30)).unwrap()
 }
@@ -30,14 +35,17 @@ fn day_with_lunch_break() -> Schedule {
 fn assert_rejected(start: DateTime<Utc>, expected: BookingError) {
     let mut schedule = day_with_lunch_break();
 
-    assert_eq!(schedule.book(start, consultation()), Err(expected));
+    assert_eq!(
+        schedule.book(patient(), start, consultation()),
+        Err(expected)
+    );
 }
 
 #[test]
 fn books_an_appointment_inside_a_shift() {
     let mut schedule = day_with_lunch_break();
 
-    let appointment = schedule.book(at(9, 0), consultation()).unwrap();
+    let appointment = schedule.book(patient(), at(9, 0), consultation()).unwrap();
 
     assert_eq!(appointment.appointment_type(), &consultation());
     assert_eq!(appointment.slot(), slot(at(9, 0), at(9, 30)));
@@ -45,10 +53,21 @@ fn books_an_appointment_inside_a_shift() {
 }
 
 #[test]
+fn the_appointment_records_its_patient() {
+    let mut schedule = day_with_lunch_break();
+
+    let appointment = schedule
+        .book(PatientId::new(7), at(9, 0), consultation())
+        .unwrap();
+
+    assert_eq!(appointment.patient(), PatientId::new(7));
+}
+
+#[test]
 fn keeps_the_booked_appointment() {
     let mut schedule = day_with_lunch_break();
 
-    schedule.book(at(9, 0), consultation()).unwrap();
+    schedule.book(patient(), at(9, 0), consultation()).unwrap();
 
     let slots: Vec<TimeSlot> = schedule.appointments().iter().map(|a| a.slot()).collect();
     assert_eq!(slots, [slot(at(9, 0), at(9, 30))]);
@@ -58,23 +77,23 @@ fn keeps_the_booked_appointment() {
 fn books_in_the_second_shift() {
     let mut schedule = day_with_lunch_break();
 
-    assert!(schedule.book(at(15, 0), consultation()).is_ok());
+    assert!(schedule.book(patient(), at(15, 0), consultation()).is_ok());
 }
 
 #[test]
 fn books_an_appointment_ending_exactly_at_the_end_of_a_shift() {
     let mut schedule = day_with_lunch_break();
 
-    assert!(schedule.book(at(17, 30), consultation()).is_ok());
+    assert!(schedule.book(patient(), at(17, 30), consultation()).is_ok());
 }
 
 #[test]
 fn books_back_to_back_appointments() {
     let mut schedule = day_with_lunch_break();
 
-    schedule.book(at(9, 0), consultation()).unwrap();
+    schedule.book(patient(), at(9, 0), consultation()).unwrap();
 
-    assert!(schedule.book(at(9, 30), consultation()).is_ok());
+    assert!(schedule.book(patient(), at(9, 30), consultation()).is_ok());
     assert_eq!(schedule.appointments().len(), 2);
 }
 
@@ -98,7 +117,7 @@ fn empty_working_hours_reject_every_appointment() {
     let mut schedule = Schedule::new(WorkingHours::new(Vec::new()).unwrap());
 
     assert_eq!(
-        schedule.book(at(9, 0), consultation()),
+        schedule.book(patient(), at(9, 0), consultation()),
         Err(BookingError::OutsideWorkingHours),
     );
 }
@@ -106,10 +125,10 @@ fn empty_working_hours_reject_every_appointment() {
 #[test]
 fn rejects_an_appointment_that_overlaps_an_existing_one() {
     let mut schedule = day_with_lunch_break();
-    schedule.book(at(9, 0), consultation()).unwrap();
+    schedule.book(patient(), at(9, 0), consultation()).unwrap();
 
     assert_eq!(
-        schedule.book(at(9, 15), consultation()),
+        schedule.book(patient(), at(9, 15), consultation()),
         Err(BookingError::Overlaps {
             existing: slot(at(9, 0), at(9, 30)),
         }),
@@ -119,10 +138,10 @@ fn rejects_an_appointment_that_overlaps_an_existing_one() {
 #[test]
 fn rejects_an_appointment_at_the_same_time_as_an_existing_one() {
     let mut schedule = day_with_lunch_break();
-    schedule.book(at(9, 0), consultation()).unwrap();
+    schedule.book(patient(), at(9, 0), consultation()).unwrap();
 
     assert_eq!(
-        schedule.book(at(9, 0), consultation()),
+        schedule.book(patient(), at(9, 0), consultation()),
         Err(BookingError::Overlaps {
             existing: slot(at(9, 0), at(9, 30)),
         }),
@@ -132,11 +151,13 @@ fn rejects_an_appointment_at_the_same_time_as_an_existing_one() {
 #[test]
 fn working_hours_are_checked_before_overlap() {
     let mut schedule = day_with_lunch_break();
-    schedule.book(at(17, 30), consultation()).unwrap();
+    schedule
+        .book(patient(), at(17, 30), consultation())
+        .unwrap();
 
     // 17:45-18:15 overlaps 17:30-18:00 and also runs past the end of the shift.
     assert_eq!(
-        schedule.book(at(17, 45), consultation()),
+        schedule.book(patient(), at(17, 45), consultation()),
         Err(BookingError::OutsideWorkingHours),
     );
 }
@@ -149,11 +170,11 @@ fn rejects_an_appointment_ending_out_of_range() {
 #[test]
 fn a_rejected_booking_leaves_the_schedule_unchanged() {
     let mut schedule = day_with_lunch_break();
-    schedule.book(at(9, 0), consultation()).unwrap();
+    schedule.book(patient(), at(9, 0), consultation()).unwrap();
     let before = schedule.clone();
 
-    assert!(schedule.book(at(9, 15), consultation()).is_err());
-    assert!(schedule.book(at(13, 0), consultation()).is_err());
+    assert!(schedule.book(patient(), at(9, 15), consultation()).is_err());
+    assert!(schedule.book(patient(), at(13, 0), consultation()).is_err());
 
     assert_eq!(schedule, before);
 }
@@ -162,9 +183,9 @@ fn a_rejected_booking_leaves_the_schedule_unchanged() {
 fn exposes_the_appointments_sorted_by_start() {
     let mut schedule = day_with_lunch_break();
 
-    schedule.book(at(15, 0), consultation()).unwrap();
-    schedule.book(at(9, 0), consultation()).unwrap();
-    schedule.book(at(11, 0), consultation()).unwrap();
+    schedule.book(patient(), at(15, 0), consultation()).unwrap();
+    schedule.book(patient(), at(9, 0), consultation()).unwrap();
+    schedule.book(patient(), at(11, 0), consultation()).unwrap();
 
     let starts: Vec<DateTime<Utc>> = schedule
         .appointments()
