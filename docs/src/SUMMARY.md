@@ -12,6 +12,7 @@
   - [1.4 Appointment types and status](steps/1.4-appointment-types.md)
   - [1.5 Working hours](steps/1.5-working-hours.md)
   - [1.6 Schedule and booking](steps/1.6-schedule.md)
+  - [1.7 Roles and access](steps/1.7-roles-and-access.md)
 
 # Reference
 
@@ -22,6 +23,7 @@
   - [appointment](reference/appointment.md)
   - [working_hours](reference/working_hours.md)
   - [schedule](reference/schedule.md)
+  - [access](reference/access.md)
 
 ---
 

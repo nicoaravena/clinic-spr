@@ -40,6 +40,7 @@ generates error boilerplate at compile time.
 | [appointment](appointment.md) | `AppointmentType`, `AppointmentStatus` | 1.4 |
 | [working_hours](working_hours.md) | `WorkingHours` | 1.5 |
 | [schedule](schedule.md) | `Schedule`, `Appointment` (in `appointment`) | 1.6 |
+| [access](access.md) | `Role`, `Capability`, `ClinicalAccess` | 1.7 |
 
 ## API docs
 

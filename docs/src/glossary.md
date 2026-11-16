@@ -10,10 +10,17 @@
   scheduled, completed, cancelled or no-show.
 - **Booking**: adding an appointment to a schedule. Refused if it falls
   outside the working hours or overlaps another appointment.
+- **Capability**: proof that a role was allowed some kind of access, such
+  as `ClinicalAccess`. Only the domain can create one, and code that needs
+  the access asks for it as a parameter.
 - **Clinic**: one customer of the platform, and one tenant. Its data must be
   invisible to every other clinic.
+- **Clinical content**: clinical notes and other medical information about a
+  patient. Only practitioners may read or write it.
 - **Practitioner**: a member of a clinic's staff who sees patients and has an
   agenda.
+- **Role**: what a member of a clinic's staff does there (practitioner,
+  receptionist or administrator), which decides what they may access.
 - **Schedule**: one practitioner's working hours and the appointments
   booked in them.
 - **Shift**: a dated period, in UTC, when a practitioner works. Shifts are
@@ -27,6 +34,8 @@
 
 ## Rust and design
 
+- **Associated const**: a constant declared in a trait that each
+  implementation must provide, such as `Capability::NAME`.
 - **Compile-fail doctest**: a code example in a doc comment, marked
   `compile_fail`, that passes only if it fails to compile. Used here to
   prove that fields are private.
@@ -52,6 +61,10 @@
 - **Smart constructor**: a function such as `new` or `parse` that checks its
   input and is the only way to build a type. Combined with private fields,
   it makes invalid values impossible to represent.
+- **Trait**: a named set of methods, functions or constants that types can
+  implement, such as `Capability`.
+- **Trait bound**: a requirement on a generic type, such as
+  `C: Capability`, meaning "any type that implements `Capability`".
 - **Value object**: a value defined entirely by its contents, with no
   identity of its own. Two equal emails are the same email.
 - **Workspace**: a set of crates that share one `Cargo.lock` and one
