@@ -9,6 +9,7 @@
 //!
 //! [`ClinicId`]: clinic_domain::ids::ClinicId
 
+pub mod agenda;
 pub mod booking;
 pub mod in_memory;
 pub mod ports;

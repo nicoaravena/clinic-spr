@@ -3,7 +3,8 @@
 Use cases, the ports they need, and in-memory adapters for those ports.
 
 - **Source:** `crates/app/src/`
-- **Introduced in:** [step 2.1](../steps/2.1-app-and-ports.md)
+- **Introduced in:** [step 2.1](../steps/2.1-app-and-ports.md); the
+  agenda query in [step 2.2](../steps/2.2-practitioner-agenda.md)
 - **API docs:** [`clinic_app`][api]
 
 ## Modules and public items
@@ -13,6 +14,7 @@ Use cases, the ports they need, and in-memory adapters for those ports.
 | `ports` | `ScheduleRepository` (`get`, `save`), `AppointmentTypes` (`find`) |
 | `in_memory` | `InMemorySchedules` (`new`), `InMemoryAppointmentTypes` (`new`, `add`), `DuplicateAppointmentType` (`name`) |
 | `booking` | `book_appointment`, `BookingRequest`, `BookAppointmentError` (`UnknownPractitioner`, `UnknownAppointmentType`, `Booking(BookingError)`) |
+| `agenda` | `practitioner_agenda`, `AgendaQuery`, `AgendaError` (`UnknownPractitioner`) |
 
 ## Rules and how they are enforced
 
@@ -24,6 +26,9 @@ Use cases, the ports they need, and in-memory adapters for those ports.
 | Only a role allowed to manage schedules can book | `book_appointment` takes a `&ScheduleAccess` |
 | A refused booking saves nothing | `book_appointment` calls `save` only after `Schedule::book` succeeds |
 | The booking rules themselves stay in the domain | `book_appointment` calls `Schedule::book` and passes its `BookingError` on unchanged |
+| Only a role allowed to see schedules can read an agenda | `practitioner_agenda` takes a `&ScheduleAccess` |
+| Which appointments are in a range is a domain rule | `practitioner_agenda` calls `Schedule::appointments_in` |
+| Reading an agenda changes nothing | `practitioner_agenda` takes `&S` and never calls `save` |
 
 ## Semantics
 
@@ -44,13 +49,20 @@ appointment.
 takes concrete adapters and trait objects (`&mut dyn ScheduleRepository`)
 alike.
 
+`practitioner_agenda(schedules, access, query)` fails with
+`UnknownPractitioner` if the practitioner has no schedule at `query.clinic`.
+Otherwise it returns copies of the appointments that overlap `query.range`,
+sorted by start, which may be none. It is generic over the port with a
+`?Sized` bound, like `book_appointment`.
+
 ## Not yet
 
 - The ports are synchronous. They become `async` in M3, with the database.
 - Appointment types are found by name. They get an ID when the database
   arrives.
-- `get` returns a whole schedule, with every appointment ever booked. A
-  database adapter will need to load a date range instead.
+- `get` returns a whole schedule, with every appointment ever booked, and
+  `practitioner_agenda` filters it in memory. A database adapter will need
+  a port method that loads only a date range.
 - Appointments have no ID, so nothing can refer to one booking yet.
 
 [api]: ../../../target/doc/clinic_app/index.html

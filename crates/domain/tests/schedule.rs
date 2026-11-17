@@ -220,3 +220,106 @@ fn error_implements_the_standard_error_trait() {
 
     assert_is_error(BookingError::OutsideWorkingHours);
 }
+
+/// Consultations at 09:00, 10:00 and 11:00.
+fn three_consultations() -> Schedule {
+    let mut schedule = day_with_lunch_break();
+    for hour in [11, 9, 10] {
+        schedule
+            .book(patient(), at(hour, 0), consultation())
+            .unwrap();
+    }
+    schedule
+}
+
+fn slots_in(schedule: &Schedule, range: TimeSlot) -> Vec<TimeSlot> {
+    schedule
+        .appointments_in(range)
+        .map(|appointment| appointment.slot())
+        .collect()
+}
+
+#[test]
+fn an_empty_schedule_has_nothing_in_any_range() {
+    let schedule = day_with_lunch_break();
+
+    assert_eq!(slots_in(&schedule, slot(at(0, 0), at(23, 0))), []);
+}
+
+#[test]
+fn appointments_in_a_range_come_sorted_by_start() {
+    let schedule = three_consultations();
+
+    assert_eq!(
+        slots_in(&schedule, slot(at(9, 0), at(12, 0))),
+        [
+            slot(at(9, 0), at(9, 30)),
+            slot(at(10, 0), at(10, 30)),
+            slot(at(11, 0), at(11, 30)),
+        ],
+    );
+}
+
+#[test]
+fn appointments_outside_the_range_are_left_out() {
+    let schedule = three_consultations();
+
+    assert_eq!(
+        slots_in(&schedule, slot(at(9, 45), at(10, 45))),
+        [slot(at(10, 0), at(10, 30))],
+    );
+}
+
+#[test]
+fn back_to_back_appointments_are_not_in_the_range() {
+    let schedule = three_consultations();
+
+    // 09:00-09:30 ends where the range starts, and 11:00-11:30 starts where it ends.
+    assert_eq!(
+        slots_in(&schedule, slot(at(9, 30), at(11, 0))),
+        [slot(at(10, 0), at(10, 30))],
+    );
+}
+
+#[test]
+fn appointments_straddling_either_edge_are_in_the_range() {
+    let schedule = three_consultations();
+
+    assert_eq!(
+        slots_in(&schedule, slot(at(9, 15), at(11, 15))),
+        [
+            slot(at(9, 0), at(9, 30)),
+            slot(at(10, 0), at(10, 30)),
+            slot(at(11, 0), at(11, 30)),
+        ],
+    );
+}
+
+#[test]
+fn a_range_inside_one_appointment_returns_it() {
+    let schedule = three_consultations();
+
+    assert_eq!(
+        slots_in(&schedule, slot(at(10, 10), at(10, 20))),
+        [slot(at(10, 0), at(10, 30))],
+    );
+}
+
+#[test]
+fn a_range_with_no_appointments_returns_nothing() {
+    let schedule = three_consultations();
+
+    assert_eq!(slots_in(&schedule, slot(at(14, 0), at(18, 0))), []);
+}
+
+#[test]
+fn asking_for_a_range_leaves_the_schedule_as_it_was() {
+    let schedule = three_consultations();
+    let range = slot(at(9, 0), at(12, 0));
+
+    let first = slots_in(&schedule, range);
+    let second = slots_in(&schedule, range);
+
+    assert_eq!(first, second);
+    assert_eq!(schedule.appointments().len(), 3);
+}

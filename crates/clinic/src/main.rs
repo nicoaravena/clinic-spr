@@ -7,6 +7,7 @@
 use std::error::Error;
 
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
+use clinic_app::agenda::{AgendaQuery, practitioner_agenda};
 use clinic_app::booking::{BookingRequest, book_appointment};
 use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemorySchedules};
 use clinic_app::ports::ScheduleRepository;
@@ -208,6 +209,58 @@ fn main() -> Result<(), Box<dyn Error>> {
                 appointment.appointment_type().name(),
                 appointment.patient().value(),
             );
+        }
+    }
+
+    println!("\n[2.2] Agenda");
+    let second_patient = PatientId::new(2);
+    let booking = BookingRequest {
+        clinic,
+        practitioner: ana,
+        patient: second_patient,
+        appointment_type: "Follow-up",
+        start: at(13, 0),
+    };
+    let appointment = book_appointment(&mut schedules, &types, &reception, booking)?;
+    println!(
+        "  Clinic {} books Follow-up with practitioner {} at 13:00 for patient {}: booked for {}",
+        clinic.value(),
+        ana.value(),
+        second_patient.value(),
+        span(appointment.slot()),
+    );
+    let queries = [
+        (clinic, TimeSlot::new(at(9, 0), at(12, 0))?),
+        (clinic, TimeSlot::new(at(10, 15), at(13, 15))?),
+        (clinic, TimeSlot::new(at(12, 0), at(13, 0))?),
+        (other_clinic, TimeSlot::new(at(9, 0), at(17, 0))?),
+    ];
+    for (at_clinic, range) in queries {
+        let heading = format!(
+            "Agenda for practitioner {} at clinic {}, {}",
+            ana.value(),
+            at_clinic.value(),
+            span(range),
+        );
+        let query = AgendaQuery {
+            clinic: at_clinic,
+            practitioner: ana,
+            range,
+        };
+        match practitioner_agenda(&schedules, &reception, query) {
+            Ok(agenda) if agenda.is_empty() => println!("  {heading}: no appointments"),
+            Ok(agenda) => {
+                println!("  {heading}:");
+                for appointment in agenda {
+                    println!(
+                        "    {} {} for patient {}",
+                        span(appointment.slot()),
+                        appointment.appointment_type().name(),
+                        appointment.patient().value(),
+                    );
+                }
+            }
+            Err(error) => println!("  {heading}: refused: {error}"),
         }
     }
 

@@ -21,7 +21,7 @@ Decisions:
 
 ## Progress
 
-Current step: **2.1**
+Current step: **2.2**
 
 ## How each step works
 

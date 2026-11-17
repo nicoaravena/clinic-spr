@@ -44,6 +44,20 @@ impl Schedule {
         &self.appointments
     }
 
+    /// The booked appointments that overlap `range`, sorted by start.
+    ///
+    /// The range is half-open like every [`TimeSlot`]: an appointment that ends exactly when the
+    /// range starts, or starts exactly when it ends, isn't in it. One that straddles either edge is.
+    pub fn appointments_in(&self, range: TimeSlot) -> impl Iterator<Item = &Appointment> {
+        // Appointments are sorted by start and never overlap, so their ends are sorted too. Every
+        // appointment that ends before the range comes first, and every one that starts after it
+        // comes last, so the walk can stop at the first one past the end.
+        self.appointments
+            .iter()
+            .skip_while(move |appointment| appointment.slot().end() <= range.start())
+            .take_while(move |appointment| appointment.slot().start() < range.end())
+    }
+
     /// Books an appointment of `appointment_type` for `patient`, starting at `start`.
     ///
     /// The checks run in this order, and the first one that fails decides the error:

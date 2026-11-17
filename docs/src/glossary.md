@@ -2,6 +2,8 @@
 
 ## Domain
 
+- **Agenda**: a practitioner's appointments in a span of time, sorted by
+  start. An appointment is in the span if it overlaps it.
 - **Appointment**: a booked visit: its patient, its appointment type, its
   slot and its status. Created only by booking it in a schedule.
 - **Appointment type**: a kind of appointment a clinic offers, such as
@@ -74,10 +76,17 @@
   `crates/clinic/tests/expected-output.txt`.
 - **Half-open interval**: a range that includes its start and excludes its
   end. Back-to-back slots don't overlap.
+- **`impl Trait` return**: a return type such as
+  `impl Iterator<Item = &Appointment>`, which promises a type implementing
+  the trait without naming it. The compiler still knows the concrete type,
+  so calls are static.
 - **Integration test**: a test in a crate's `tests/` directory. It is
   compiled as a separate crate and can only use the public API.
 - **Invariant**: a rule that is always true for every value of a type, such
   as "start is before end".
+- **Iterator adapter**: a method such as `map`, `filter` or `take_while`
+  that wraps one iterator in another. Adapters are lazy: nothing runs until
+  the items are pulled out, by `for`, `collect` or `next`.
 - **Lifetime**: the span during which a reference is valid, written `'a`.
   The compiler checks that no reference outlives the value it points to.
 - **Lifetime elision**: rules that let the compiler fill in lifetimes you
@@ -92,6 +101,8 @@
 - **Precise capturing**: `+ use<'a>` on an `impl Trait` return type, which
   lists the lifetimes the hidden type may borrow. Without it, edition 2024
   captures every lifetime in scope.
+- **Query**: a use case that only reads, such as `practitioner_agenda`. It
+  takes its ports by `&` and never saves.
 - **Repository**: a port that stores and finds one kind of domain object,
   as if it were an in-memory collection.
 - **`?` operator**: unwraps an `Ok` or `Some`, or returns the `Err` or

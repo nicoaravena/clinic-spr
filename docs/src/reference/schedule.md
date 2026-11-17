@@ -8,7 +8,7 @@ One practitioner's working hours and the appointments booked in them.
 
 ## Public items
 
-- `Schedule`: `new`, `appointments`, `book`
+- `Schedule`: `new`, `appointments`, `appointments_in`, `book`
 - `BookingError`: `OutOfRange`, `OutsideWorkingHours`, `Overlaps { existing }`
 
 ## Rules and how they are enforced
@@ -33,6 +33,15 @@ then checks, in this order, and stops at the first failure:
 On success it returns a reference to the new `Scheduled` appointment. On
 failure the schedule is unchanged. Back-to-back appointments are allowed,
 because slots are half-open.
+
+`appointments_in(range)` returns an iterator over the appointments that
+overlap `range`, sorted by start (added in
+[step 2.2](../steps/2.2-practitioner-agenda.md)). It borrows the schedule
+and copies nothing. Overlap is half-open, as for `TimeSlot::overlaps`: an
+appointment ending exactly at `range.start()` or starting exactly at
+`range.end()` is left out, and one straddling either edge is included. It
+relies on appointments being sorted and non-overlapping to stop at the end
+of the range.
 
 ## Not yet
 
