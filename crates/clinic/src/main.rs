@@ -6,11 +6,13 @@
 
 use std::error::Error;
 
-use chrono::{DateTime, TimeDelta, TimeZone, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, TimeDelta, TimeZone, Utc, Weekday};
+use chrono_tz::America::Santiago;
 use clinic_app::agenda::{AgendaQuery, practitioner_agenda};
 use clinic_app::booking::{BookingRequest, book_appointment};
 use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemorySchedules};
 use clinic_app::ports::ScheduleRepository;
+use clinic_app::weekly_hours::{WeeklyHours, WeeklyShift};
 use clinic_domain::access::{AuditAccess, ClinicalAccess, Role, ScheduleAccess};
 use clinic_domain::appointment::AppointmentType;
 use clinic_domain::clinical_note::ClinicalNote;
@@ -264,10 +266,67 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    println!("\n[2.3] Weekly hours");
+    let mut weekly = Vec::new();
+    for weekday in [
+        Weekday::Mon,
+        Weekday::Tue,
+        Weekday::Wed,
+        Weekday::Thu,
+        Weekday::Fri,
+    ] {
+        weekly.push(WeeklyShift::new(weekday, local(9, 0), local(13, 0))?);
+        weekly.push(WeeklyShift::new(weekday, local(14, 0), local(18, 0))?);
+    }
+    weekly.push(WeeklyShift::new(Weekday::Sat, local(20, 0), local(23, 30))?);
+    weekly.push(WeeklyShift::new(Weekday::Sun, local(0, 0), local(2, 0))?);
+    let weekly = WeeklyHours::new(Santiago, weekly)?;
+    println!(
+        "  Practitioner {} works Mon-Fri 09:00-13:00 and 14:00-18:00, on call Sat 20:00-23:30 and Sun 00:00-02:00, in {}",
+        ana.value(),
+        weekly.time_zone(),
+    );
+    let ranges = [
+        (
+            "Clocks go back at the end of Sat 2026-04-04, so 23:00-24:00 happens twice",
+            day(2026, 4, 3),
+            day(2026, 4, 7),
+        ),
+        (
+            "Clocks jump forward at the start of Sun 2026-09-06, so 00:00-01:00 doesn't exist",
+            day(2026, 9, 5),
+            day(2026, 9, 7),
+        ),
+    ];
+    for (heading, from, until) in ranges {
+        println!("  {heading}:");
+        for shift in weekly.working_hours(from, until).shifts() {
+            let start = shift.start().with_timezone(&Santiago);
+            let end = shift.end().with_timezone(&Santiago);
+            println!(
+                "    {}-{} at {} is {} UTC",
+                start.format("%a %Y-%m-%d %H:%M"),
+                end.format("%H:%M"),
+                start.format("%:z"),
+                span(*shift),
+            );
+        }
+    }
+
     Ok(())
 }
 
 /// A time on the scripted day, Monday 2026-03-02, in UTC.
 fn at(hour: u32, minute: u32) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 3, 2, hour, minute, 0).unwrap()
+}
+
+/// A local time of day, for weekly hours.
+fn local(hour: u32, minute: u32) -> NaiveTime {
+    NaiveTime::from_hms_opt(hour, minute, 0).unwrap()
+}
+
+/// A local calendar date, for expanding weekly hours.
+fn day(year: i32, month: u32, day: u32) -> NaiveDate {
+    NaiveDate::from_ymd_opt(year, month, day).unwrap()
 }

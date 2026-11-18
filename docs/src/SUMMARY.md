@@ -17,6 +17,7 @@
   - [1.8 Clinical notes](steps/1.8-clinical-notes.md)
   - [2.1 The app crate and ports](steps/2.1-app-and-ports.md)
   - [2.2 The practitioner's agenda](steps/2.2-practitioner-agenda.md)
+  - [2.3 Weekly hours and daylight saving](steps/2.3-weekly-hours.md)
 
 # Reference
 

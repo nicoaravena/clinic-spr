@@ -30,8 +30,10 @@ as 09-17.
 
 ## Where shifts come from
 
-The domain only knows concrete UTC shifts. Building them from a weekly
-template in a local time zone, including daylight saving changes, happens
-outside the domain (roadmap M2).
+The domain only knows concrete UTC shifts. They are built from a weekly
+template in a local time zone, including daylight saving changes, outside
+the domain: `WeeklyHours::working_hours` in the
+[app crate](app.md#weekly-hours), since
+[step 2.3](../steps/2.3-weekly-hours.md).
 
 [api]: ../../../target/doc/clinic_domain/working_hours/index.html

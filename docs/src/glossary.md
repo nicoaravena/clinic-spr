@@ -23,22 +23,35 @@
   overwritten: each correction adds a new version.
 - **Correction**: a new version of a clinical note, written by its author.
   The earlier versions are kept.
+- **Daylight saving time (DST)**: moving a time zone's clocks forward in
+  spring and back in autumn. Each change makes some local times skipped or
+  repeated.
 - **Patient**: a person a clinic treats. Appointments are for a patient,
   and clinical notes are about one.
 - **Practitioner**: a member of a clinic's staff who sees patients and has an
   agenda.
+- **Repeated local time**: a clock reading that happens twice, because the
+  clocks went back. A weekly shift uses its first occurrence.
 - **Role**: what a member of a clinic's staff does there (practitioner,
   receptionist or administrator), which decides what they may access.
 - **Schedule**: one practitioner's working hours and the appointments
   booked in them.
 - **Shift**: a dated period, in UTC, when a practitioner works. Shifts are
   stored as time slots.
+- **Skipped local time**: a clock reading that never happens, because the
+  clocks jumped forward over it. A weekly shift reads it as the instant the
+  clocks jump to.
 - **Slot (time slot)**: a span of time with a start (included) and an end
   (excluded).
 - **Tenant**: a customer whose data is kept apart from every other
   customer's. Here, a clinic.
+- **Time zone**: a region's rules for turning UTC into local clock time,
+  including when daylight saving starts and ends, such as
+  `America/Santiago`. Each clinic's weekly hours are written in one.
 - **Version**: one state of a clinical note: its text, its author and when
   it was written. A version never changes.
+- **Weekly hours**: the shifts a practitioner works each week, as weekdays
+  and local times in a time zone. They are expanded into dated UTC shifts.
 - **Working hours**: all of a practitioner's shifts. A booking must fit
   inside one shift.
 
@@ -91,9 +104,13 @@
   The compiler checks that no reference outlives the value it points to.
 - **Lifetime elision**: rules that let the compiler fill in lifetimes you
   don't write. A method's returned reference gets the lifetime of `&self`.
+- **Match guard**: an `if` condition after a pattern in a `match` arm. The
+  arm runs only if the pattern fits and the condition holds.
 - **Move**: passing a value by value hands over ownership. The caller can't
   use it afterwards unless it cloned it first. `Schedule::book` moves the
   appointment type into the new appointment.
+- **Naive time**: chrono's `NaiveTime`, `NaiveDate` and `NaiveDateTime`: a
+  clock or calendar reading with no time zone, so not yet an instant.
 - **Newtype**: a tuple struct with one field that wraps another type, to give
   it a distinct type and its own rules. `ClinicId(u64)` is one.
 - **Port**: a trait that says what a use case needs from the outside world,
