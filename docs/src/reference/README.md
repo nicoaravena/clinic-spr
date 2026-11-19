@@ -2,7 +2,7 @@
 
 ## Crates
 
-Today the workspace has three crates. The roadmap adds the others when they
+Today the workspace has four crates. The roadmap adds the others when they
 are needed:
 
 | Crate | Holds | Arrives in |
@@ -10,15 +10,17 @@ are needed:
 | `crates/domain` (`clinic-domain`) | entities, value objects, rules; no I/O | M1 (now) |
 | `crates/clinic` (`clinic`) | the binary and composition root; a scripted day until step 2.5 | M1 (now) |
 | `crates/app` (`clinic-app`) | use cases, ports (repository traits) and in-memory adapters; see [app](app.md) | 2.1 (now) |
-| `crates/api` | axum handlers, as a library | M2 |
+| `crates/api` (`clinic-api`) | axum router and handlers, as a library; see [api](api.md) | 2.4 (now) |
 | `crates/db` | sqlx adapters, migrations, tenant access | M3 |
 
 Dependencies point inward: `api -> app -> domain` and `db -> app -> domain`.
-Only `clinic` depends on all of them, to wire them together.
+Only `clinic` depends on all of them, to wire them together. `clinic` doesn't
+depend on `api` yet; it will in step 2.5.
 The domain depends on nothing else in the workspace, and `app` depends only
-on the domain. Its only external
+on the domain. The domain's only external
 dependencies are `chrono`, without the system clock, and `thiserror`, which
-generates error boilerplate at compile time.
+generates error boilerplate at compile time. `app` adds `chrono-tz`. Only
+`api` uses `axum` and `serde`.
 
 ## Rules that hold across the domain
 

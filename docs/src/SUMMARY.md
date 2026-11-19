@@ -18,6 +18,7 @@
   - [2.1 The app crate and ports](steps/2.1-app-and-ports.md)
   - [2.2 The practitioner's agenda](steps/2.2-practitioner-agenda.md)
   - [2.3 Weekly hours and daylight saving](steps/2.3-weekly-hours.md)
+  - [2.4 The HTTP API](steps/2.4-http-api.md)
 
 # Reference
 
@@ -31,6 +32,7 @@
   - [access](reference/access.md)
   - [clinical_note](reference/clinical_note.md)
   - [app (crate)](reference/app.md)
+  - [api (crate)](reference/api.md)
 
 ---
 

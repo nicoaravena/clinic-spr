@@ -59,8 +59,15 @@
 
 - **Adapter**: a type that implements a port for one technology, such as
   `InMemorySchedules`. Swapping the adapter doesn't change the use case.
+- **`Arc`**: an atomically reference-counted pointer. Clones share one
+  value, which is dropped when the last clone goes. It hands out only `&`,
+  so changing the value needs something like a `Mutex` inside.
 - **Associated const**: a constant declared in a trait that each
   implementation must provide, such as `Capability::NAME`.
+- **Associated type**: a type declared in a trait that each implementation
+  chooses, such as `FromRequestParts::Rejection`.
+- **`async fn`**: a function that returns a future instead of running. Its
+  body runs when the future is polled and can pause at each `.await`.
 - **Binary crate**: a crate with a `main` function that compiles to a
   program you can run. `clinic` is one; `clinic-domain` is a library.
 - **Borrow checker**: the part of the compiler that enforces borrowing
@@ -73,6 +80,9 @@
   and wired together. Here, `main` in `crates/clinic`.
 - **Crate**: the unit Rust compiles: a library or a binary. `clinic-domain`
   is a library crate.
+- **Data transfer object (DTO)**: a type that describes a wire format and
+  nothing else, such as `BookAppointmentBody`. It derives serde so the
+  domain types don't have to.
 - **Derive**: `#[derive(...)]` asks the compiler to write standard trait
   implementations, such as `Debug` or `PartialEq`, for a type.
 - **Derive macro**: a library-provided `derive`, such as `thiserror`'s
@@ -80,6 +90,11 @@
 - **Dynamic dispatch**: calling a method through a trait object
   (`&dyn Trait`), where the method to run is looked up at runtime. One
   compiled copy serves every type.
+- **Extractor**: a type that axum builds from a request before calling a
+  handler, such as `Json<T>`, `State<T>` or `ClinicHeader`. If it can't, its
+  rejection becomes the response.
+- **Future**: a value that represents work in progress. It does nothing
+  until a runtime polls it, and each poll runs it to its next `.await`.
 - **Generic**: a function or type with a type parameter, such as
   `book_appointment<S: ScheduleRepository>`. The compiler makes one copy per
   concrete type used (*monomorphization*), so calls are dispatched
@@ -89,6 +104,9 @@
   `crates/clinic/tests/expected-output.txt`.
 - **Half-open interval**: a range that includes its start and excludes its
   end. Back-to-back slots don't overlap.
+- **Handler**: an async function that axum calls for a route. Its
+  parameters are extractors and its return value implements
+  `IntoResponse`.
 - **`impl Trait` return**: a return type such as
   `impl Iterator<Item = &Appointment>`, which promises a type implementing
   the trait without naming it. The compiler still knows the concrete type,
@@ -104,11 +122,17 @@
   The compiler checks that no reference outlives the value it points to.
 - **Lifetime elision**: rules that let the compiler fill in lifetimes you
   don't write. A method's returned reference gets the lifetime of `&self`.
+- **Lost update**: two writers read the same value, both change it, and
+  the second save silently replaces the first. Prevented here by holding
+  one lock from the read to the save.
 - **Match guard**: an `if` condition after a pattern in a `match` arm. The
   arm runs only if the pattern fits and the condition holds.
 - **Move**: passing a value by value hands over ownership. The caller can't
   use it afterwards unless it cloned it first. `Schedule::book` moves the
   appointment type into the new appointment.
+- **`Mutex`**: a lock that lets one owner at a time reach a value. `lock()`
+  returns a guard, and dropping the guard unlocks. A mutex is *poisoned* if
+  a thread panics while holding it.
 - **Naive time**: chrono's `NaiveTime`, `NaiveDate` and `NaiveDateTime`: a
   clock or calendar reading with no time zone, so not yet an instant.
 - **Newtype**: a tuple struct with one field that wraps another type, to give
@@ -120,16 +144,28 @@
   captures every lifetime in scope.
 - **Query**: a use case that only reads, such as `practitioner_agenda`. It
   takes its ports by `&` and never saves.
+- **Rejection**: the error an extractor returns when it can't build itself
+  from a request. It implements `IntoResponse`.
 - **Repository**: a port that stores and finds one kind of domain object,
   as if it were an in-memory collection.
+- **Runtime (async)**: the library that polls futures and schedules them
+  on threads. Rust doesn't ship one; this project uses tokio.
 - **`?` operator**: unwraps an `Ok` or `Some`, or returns the `Err` or
   `None` from the current function early.
+- **`Send` and `Sync`**: `Send` means a value may move to another thread;
+  `Sync` means it may be shared by reference between threads. The compiler
+  works them out from a type's fields. axum requires handlers' futures to
+  be `Send`.
 - **`Sized` and `?Sized`**: `Sized` types have a size known at compile
   time. Type parameters are `Sized` unless marked `?Sized`, which lets them
   be a trait object such as `dyn ScheduleRepository`.
 - **Smart constructor**: a function such as `new` or `parse` that checks its
   input and is the only way to build a type. Combined with private fields,
   it makes invalid values impossible to represent.
+- **Status code**: the number at the start of an HTTP response. Here: 201
+  booked, 400 bad header or malformed JSON, 403 role not allowed, 409
+  clashes with an existing appointment, 415 not JSON, 422 well-formed but
+  refused, 500 server fault.
 - **Trait**: a named set of methods, functions or constants that types can
   implement, such as `Capability`.
 - **Trait bound**: a requirement on a generic type, such as

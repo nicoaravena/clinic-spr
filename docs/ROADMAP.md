@@ -21,7 +21,7 @@ Decisions:
 
 ## Progress
 
-Current step: **2.3**
+Current step: **2.4**
 
 ## How each step works
 
@@ -84,6 +84,7 @@ Delivers `POST /appointments` and `GET /practitioners/{id}/agenda`, working thro
 | 2.3 | Weekly template to dated UTC shifts in the clinic's time zone, daylight saving included (adds `chrono-tz`) | `chrono-tz`, `LocalResult`, ambiguous and missing local times |
 | 2.4 | `api` crate: axum, `POST /appointments` with `X-Clinic-Id`, serde DTOs, domain errors to HTTP status codes | async/await, tokio, `Arc<Mutex<_>>`, `Send`/`Sync`, extractors, serde |
 | 2.5 | `GET /practitioners/{id}/agenda`; the `clinic` binary serves HTTP; the scripted day becomes a curl walkthrough | composition root, graceful shutdown, integration tests over HTTP |
+| 2.6 | Endpoint to set a practitioner's weekly hours: a time zone name parsed to a `Tz`, expanded over a fixed horizon into their schedule | parsing at the edge, path extractors, `PUT` semantics |
 
 The `clinic` binary switches from its scripted day to serving HTTP, and the scripted day becomes a
 curl walkthrough.
