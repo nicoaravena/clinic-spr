@@ -47,12 +47,12 @@ Then, from the repository root:
 
 ```sh
 cargo doc --no-deps          # API docs, written to target/doc/
-mdbook build docs --open     # the book, written to docs/book/
+mdbook build docs --open     # the book, written to public/
 ```
 
 The reference pages link to the API docs with relative file paths, so those
-links work when the book is opened from `docs/book/` after `cargo doc` has
+links work when the book is opened from `public/` after `cargo doc` has
 run. `mdbook serve docs --open` rebuilds on every save, which is handy while
 editing, but it can't serve the API docs, so those links break there.
 
-`docs/book/` is build output and is not committed.
+`public/` is build output and is not committed.

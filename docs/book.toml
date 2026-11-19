@@ -5,7 +5,7 @@ language = "en"
 src = "src"
 
 [build]
-build-dir = "book"
+build-dir = "../public"
 create-missing = false
 
 [output.html]
@@ -13,5 +13,5 @@ site-url = "/clinic-spr/"
 theme = "theme"
 default-theme = "late"
 preferred-dark-theme = "mocha"
-additional-css = ["./theme/catppuccin.css"]
+additional-css = ["theme/catppuccin.css"]
 git-repository-url = "https://gitlab.com/nicoaravena/clinic-spr"

@@ -17,4 +17,4 @@ target
 rustc-ice-*.txt
 
 # mdBook build output
-docs/book/
+public/

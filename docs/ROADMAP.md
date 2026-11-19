@@ -44,7 +44,7 @@ Current step: **2.4**
 
 ## Target structure (grows as needed, not scaffolded up front)
 
-```
+```text
 Cargo.toml              workspace
 crates/domain/          entities, value objects, rules; no I/O dependencies
 crates/app/             use cases and repository traits (from M2)
