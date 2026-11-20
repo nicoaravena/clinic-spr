@@ -21,7 +21,7 @@ Decisions:
 
 ## Progress
 
-Current step: **2.6**
+Current step: **3.1** (M2 is done; 3.1 has not started)
 
 ## How each step works
 
@@ -114,6 +114,42 @@ saving changes must be handled correctly.
 
 Concepts: sqlx, compile-time checked queries, transactions, integration tests, Docker Compose.
 **Key test:** data written for clinic A can't be seen from clinic B.
+
+Delivers the same three endpoints as M2, backed by Postgres: the walkthrough runs against a real
+database and its output doesn't change, except where M3 adds behavior (unknown clinics, the
+overlap guard).
+
+| Step | Build | Rust concepts |
+|---|---|---|
+| 3.1 | Ports become `async` and fallible (`StorageError`, mapped to 500); in-memory adapters and handlers follow. No behavior change | `async fn` in traits, `Send` bounds on returned futures, `tokio::sync::Mutex` vs `std` |
+| 3.2 | Tenant sessions: `begin(ClinicId)` returns a session that implements the ports and ends with `commit`. Port methods lose their `ClinicId` argument. No behavior change | associated types, ownership of a unit of work, `Drop` as rollback |
+| 3.3 | `db` crate and `compose.yaml` (Postgres): pool, platform migrations, `platform.clinics`, `SchemaName` derived from `ClinicId`. DB test harness | sqlx pool, `migrate!`, `query!` and the offline `.sqlx` cache, integration tests against Docker |
+| 3.4 | Provisioning: create `clinic_<id>`, run tenant migrations, record per-schema migration status. `TenantDb::begin` and `TenantTx` with `SET LOCAL search_path`. **Isolation test** at the database level | transactions, `&mut` borrows that can't escape, identifiers that can't be bound |
+| 3.5 | Postgres adapters for `ScheduleRepository` and `AppointmentTypes` inside a `TenantTx`. One contract test suite runs against both the in-memory and the Postgres adapters. Domain gains a way to rebuild a stored `Schedule` | row to domain mapping, `TryFrom`, generic test suites |
+| 3.6 | Overlap guard: exclusion constraint (`btree_gist`) on appointments, the practitioner's row locked on load, `23P01` mapped to the overlap error (409). Concurrency test: of two parallel bookings for one slot, exactly one succeeds | database errors as domain errors, `tokio::join!`, races and how to test them |
+| 3.7 | The server on Postgres: `DATABASE_URL`, platform migration and idempotent demo provisioning at startup (replaces `seed.rs`), unknown clinic is a 404, isolation shown over HTTP in the walkthrough. Milestone run with curl | configuration at the edge, startup that fails early, `Arc` without `Mutex` |
+| 3.8 | GitLab CI job for fmt, clippy and tests with a Postgres service, next to the docs jobs | CI services, `SQLX_OFFLINE` |
+
+Notes for the steps:
+
+- **Why sessions (3.2) before the database:** today one `Mutex` around all storage makes "read the
+  schedule, book, save" atomic. Postgres has no such lock, so the use case needs a transaction
+  around the whole read-modify-write. The session gives it one, and makes the tenant part of the
+  type instead of an argument that can be wrong. `api -> app` stays free of sqlx: the `db` crate
+  implements the session by wrapping a `TenantTx`.
+- **Saving a schedule:** `Schedule` is saved as a whole today. In Postgres that would delete and
+  re-insert every appointment on each booking, which loses concurrent writes. The adapter instead
+  inserts only new appointments and replaces only shifts from the changed date, under the row lock
+  from 3.6.
+- **Appointments have no ID yet.** The tables use a surrogate key that the domain doesn't see. An
+  `AppointmentId` arrives when an endpoint needs to name one (cancel, reschedule).
+- **Tenant migrations and `query!`:** sqlx's migrator records what it ran in `_sqlx_migrations` in
+  the current `search_path`, so running it per schema gives per-schema status for free. It runs its
+  own transactions, so it needs a connection with a session-level `search_path` that is closed
+  afterwards, not `SET LOCAL`. Compile-time checks of tenant queries need a migrated template
+  schema in the development database.
+- **Tests need Postgres from 3.3 on:** `docker compose up -d` before `cargo test`. Database tests
+  fail rather than skip when it's missing, so a green run always includes the isolation test.
 
 ### M4: Identity and access
 
