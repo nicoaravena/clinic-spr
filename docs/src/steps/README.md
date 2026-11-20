@@ -11,8 +11,9 @@ page has the same sections:
 4. **Design choices worth questioning.** Decisions that could have gone
    another way, and why they went this way.
 5. **Tests.** What the tests pin down.
-6. **See it run.** What the step added to the scripted day in `crates/clinic`,
-   with the new output lines from `cargo run -p clinic`.
+6. **See it run.** What the step added to the running clinic: up to step
+   2.3, new lines in the scripted day printed by `cargo run -p clinic`; from
+   step 2.5, new requests in the curl walkthrough and their answers.
 7. **Commits.** Where to find the step in `git log`.
 
 Pages for steps 1.1 to 1.7 were written before the runnable clinic existed,

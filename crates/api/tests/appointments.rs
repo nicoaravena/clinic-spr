@@ -1,80 +1,18 @@
-use axum::Router;
+mod common;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::IntoResponse;
-use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use clinic_api::error::ApiError;
-use clinic_api::router;
 use clinic_api::state::AppState;
+use clinic_app::agenda::AgendaError;
 use clinic_app::booking::BookAppointmentError;
-use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemorySchedules};
-use clinic_app::ports::ScheduleRepository;
 use clinic_domain::access::{ClinicalAccess, Role};
-use clinic_domain::appointment::AppointmentType;
-use clinic_domain::ids::{ClinicId, PractitionerId};
-use clinic_domain::schedule::{BookingError, Schedule};
-use clinic_domain::time_slot::TimeSlot;
-use clinic_domain::working_hours::WorkingHours;
-use http_body_util::BodyExt;
-use serde_json::{Value, json};
-use tower::ServiceExt;
+use clinic_domain::schedule::BookingError;
+use clinic_domain::time_slot::{TimeSlot, TimeSlotError};
+use serde_json::json;
 
-fn at(hour: u32, minute: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 3, 2, hour, minute, 0).unwrap()
-}
-
-/// Clinic 1: practitioner 1 works 09:00-12:00 UTC on 2026-03-02 and the clinic offers a 30-minute
-/// "Consultation". Clinic 2 offers "Consultation" too but has no schedules.
-fn app() -> Router {
-    let mut schedules = InMemorySchedules::new();
-    let hours = WorkingHours::new(vec![TimeSlot::new(at(9, 0), at(12, 0)).unwrap()]).unwrap();
-    schedules.save(
-        ClinicId::new(1),
-        PractitionerId::new(1),
-        Schedule::new(hours),
-    );
-
-    let mut types = InMemoryAppointmentTypes::new();
-    let consultation = AppointmentType::new("Consultation", TimeDelta::minutes(30)).unwrap();
-    types.add(ClinicId::new(1), consultation.clone()).unwrap();
-    types.add(ClinicId::new(2), consultation).unwrap();
-
-    router(AppState::new(schedules, types))
-}
-
-fn booking(start: &str) -> Value {
-    json!({
-        "practitioner_id": 1,
-        "patient_id": 7,
-        "appointment_type": "Consultation",
-        "start": start,
-    })
-}
-
-/// Sends `POST /appointments` with a JSON content type and returns the status and JSON body.
-async fn post(app: Router, clinic: Option<&str>, body: String) -> (StatusCode, Value) {
-    let mut request = Request::builder()
-        .method("POST")
-        .uri("/appointments")
-        .header("content-type", "application/json");
-    if let Some(clinic) = clinic {
-        request = request.header("x-clinic-id", clinic);
-    }
-    send(app, request.body(Body::from(body)).unwrap()).await
-}
-
-async fn send(app: Router, request: Request<Body>) -> (StatusCode, Value) {
-    let response = app.oneshot(request).await.unwrap();
-    let status = response.status();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    let body = serde_json::from_slice(&bytes).unwrap_or_else(|error| {
-        panic!(
-            "body should be JSON ({error}): {}",
-            String::from_utf8_lossy(&bytes)
-        )
-    });
-    (status, body)
-}
+use common::{app, at, booking, post, send};
 
 #[tokio::test]
 async fn a_valid_booking_is_created_and_returned() {
@@ -331,6 +269,16 @@ fn every_api_error_has_its_documented_status_and_code() {
             ApiError::Internal,
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal",
+        ),
+        (
+            ApiError::from(TimeSlotError::EndNotAfterStart),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_range",
+        ),
+        (
+            ApiError::from(AgendaError::UnknownPractitioner),
+            StatusCode::NOT_FOUND,
+            "unknown_practitioner",
         ),
     ];
 

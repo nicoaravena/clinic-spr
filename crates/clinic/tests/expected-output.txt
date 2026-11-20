@@ -1,74 +1,50 @@
-Clinic 1 opens on Monday 2026-03-02. All times are UTC.
+# [2.4] Book a 30-minute consultation at 10:00 UTC
+$ curl -s localhost:3000/appointments -H 'X-Clinic-Id: 1' -H 'Content-Type: application/json' -d '{"practitioner_id":1,"patient_id":1,"appointment_type":"Consultation","start":"2026-03-02T10:00:00Z"}'
+201 Created
+{"practitioner_id":1,"patient_id":1,"appointment_type":"Consultation","start":"2026-03-02T10:00:00Z","end":"2026-03-02T10:30:00Z","status":"scheduled"}
 
-[1.2] Staff
-  Practitioner 1 registered as ana@example.com
-  Email "ana@example" refused: email address has an invalid format
+# [2.4] The same request again: the slot is taken
+$ curl -s localhost:3000/appointments -H 'X-Clinic-Id: 1' -H 'Content-Type: application/json' -d '{"practitioner_id":1,"patient_id":1,"appointment_type":"Consultation","start":"2026-03-02T10:00:00Z"}'
+409 Conflict
+{"error":"overlaps","message":"appointment overlaps an existing appointment"}
 
-[1.3] Time slots
-  Slot 10:00-09:00 refused: time slot end must be after its start
+# [2.4] A follow-up at 11:50 would run past the end of the 09:00-12:00 shift
+$ curl -s localhost:3000/appointments -H 'X-Clinic-Id: 1' -H 'Content-Type: application/json' -d '{"practitioner_id":1,"patient_id":2,"appointment_type":"Follow-up","start":"2026-03-02T11:50:00Z"}'
+422 Unprocessable Entity
+{"error":"outside_working_hours","message":"appointment is outside the practitioner's working hours"}
 
-[1.4] Appointment types
-  Consultation lasts 30 min
-  Follow-up lasts 15 min
-  Check-up lasting 0 min refused: appointment type duration must be positive
+# [2.4] A follow-up at 10:00 in Santiago (-03:00) is stored as 13:00 UTC
+$ curl -s localhost:3000/appointments -H 'X-Clinic-Id: 1' -H 'Content-Type: application/json' -d '{"practitioner_id":1,"patient_id":2,"appointment_type":"Follow-up","start":"2026-03-02T10:00:00-03:00"}'
+201 Created
+{"practitioner_id":1,"patient_id":2,"appointment_type":"Follow-up","start":"2026-03-02T13:00:00Z","end":"2026-03-02T13:15:00Z","status":"scheduled"}
 
-[1.5] Working hours
-  Practitioner 1 works 09:00-12:00
-  Practitioner 1 works 13:00-17:00
+# [2.4] Clinic 2 can't book into clinic 1's practitioner
+$ curl -s localhost:3000/appointments -H 'X-Clinic-Id: 2' -H 'Content-Type: application/json' -d '{"practitioner_id":1,"patient_id":3,"appointment_type":"Consultation","start":"2026-03-02T11:00:00Z"}'
+422 Unprocessable Entity
+{"error":"unknown_practitioner","message":"clinic has no schedule for that practitioner"}
 
-[1.6] Booking
-  Consultation at 09:00 booked for 09:00-09:30
-  Follow-up at 09:15 refused: appointment overlaps an existing appointment (09:00-09:30)
-  Consultation at 11:45 refused: appointment is outside the practitioner's working hours
-  Follow-up at 13:00 booked for 13:00-13:15
-  Agenda for practitioner 1:
-    09:00-09:30 Consultation (Scheduled)
-    13:00-13:15 Follow-up (Scheduled)
+# [2.4] Every request must name its clinic
+$ curl -s localhost:3000/appointments -H 'Content-Type: application/json' -d '{"practitioner_id":1,"patient_id":1,"appointment_type":"Consultation","start":"2026-03-02T11:00:00Z"}'
+400 Bad Request
+{"error":"missing_clinic_id","message":"the X-Clinic-Id header is missing"}
 
-[1.7] Access
-  Receptionist asks for clinical content: refused: role may not access clinical content
-  Administrator asks for clinical content: refused: role may not access clinical content
-  Administrator asks for the audit log: granted
-  Practitioner 1 asks for clinical content: granted to practitioner 1
+# [2.5] Practitioner 1's agenda for the working day
+$ curl -s 'localhost:3000/practitioners/1/agenda?from=2026-03-02T09:00:00Z&to=2026-03-02T17:00:00Z' -H 'X-Clinic-Id: 1'
+200 OK
+{"practitioner_id":1,"from":"2026-03-02T09:00:00Z","to":"2026-03-02T17:00:00Z","appointments":[{"practitioner_id":1,"patient_id":1,"appointment_type":"Consultation","start":"2026-03-02T10:00:00Z","end":"2026-03-02T10:30:00Z","status":"scheduled"},{"practitioner_id":1,"patient_id":2,"appointment_type":"Follow-up","start":"2026-03-02T13:00:00Z","end":"2026-03-02T13:15:00Z","status":"scheduled"}]}
 
-[1.8] Clinical notes
-  Practitioner 1 writes a note for patient 1 at 09:30
-  Practitioner 1 corrects it at 09:45
-  Correction with the same text refused: correction doesn't change the note
-  Correction dated 09:00 refused: correction is dated before the latest version
-  Practitioner 2 corrects it: refused: only the note's author may correct it
-  History of the note, oldest first:
-    09:30 by practitioner 1: Mild fever.
-    09:45 by practitioner 1: Mild fever, 38.2 C.
+# [2.5] Nothing is booked over lunch
+$ curl -s 'localhost:3000/practitioners/1/agenda?from=2026-03-02T12:00:00Z&to=2026-03-02T13:00:00Z' -H 'X-Clinic-Id: 1'
+200 OK
+{"practitioner_id":1,"from":"2026-03-02T12:00:00Z","to":"2026-03-02T13:00:00Z","appointments":[]}
 
-[2.1] Booking through the app
-  Clinic 1 adds Consultation again: refused: clinic already has an appointment type named "Consultation"
-  Clinic 1 books Consultation with practitioner 1 at 10:00: booked for 10:00-10:30
-  Clinic 1 books Check-up with practitioner 1 at 10:30: refused: clinic has no appointment type with that name
-  Clinic 1 books Follow-up with practitioner 1 at 10:15: refused: appointment overlaps an existing appointment
-  Clinic 2 books Consultation with practitioner 1 at 11:00: refused: clinic has no schedule for that practitioner
-  Saved agenda for practitioner 1:
-    10:00-10:30 Consultation for patient 1
+# [2.5] Clinic 2 can't read clinic 1's agenda
+$ curl -s 'localhost:3000/practitioners/1/agenda?from=2026-03-02T09:00:00Z&to=2026-03-02T17:00:00Z' -H 'X-Clinic-Id: 2'
+404 Not Found
+{"error":"unknown_practitioner","message":"clinic has no schedule for that practitioner"}
 
-[2.2] Agenda
-  Clinic 1 books Follow-up with practitioner 1 at 13:00 for patient 2: booked for 13:00-13:15
-  Agenda for practitioner 1 at clinic 1, 09:00-12:00:
-    10:00-10:30 Consultation for patient 1
-  Agenda for practitioner 1 at clinic 1, 10:15-13:15:
-    10:00-10:30 Consultation for patient 1
-    13:00-13:15 Follow-up for patient 2
-  Agenda for practitioner 1 at clinic 1, 12:00-13:00: no appointments
-  Agenda for practitioner 1 at clinic 2, 09:00-17:00: refused: clinic has no schedule for that practitioner
+# [2.5] A range must end after it starts
+$ curl -s 'localhost:3000/practitioners/1/agenda?from=2026-03-02T17:00:00Z&to=2026-03-02T09:00:00Z' -H 'X-Clinic-Id: 1'
+422 Unprocessable Entity
+{"error":"invalid_range","message":"time slot end must be after its start"}
 
-[2.3] Weekly hours
-  Practitioner 1 works Mon-Fri 09:00-13:00 and 14:00-18:00, on call Sat 20:00-23:30 and Sun 00:00-02:00, in America/Santiago
-  Clocks go back at the end of Sat 2026-04-04, so 23:00-24:00 happens twice:
-    Fri 2026-04-03 09:00-13:00 at -03:00 is 12:00-16:00 UTC
-    Fri 2026-04-03 14:00-18:00 at -03:00 is 17:00-21:00 UTC
-    Sat 2026-04-04 20:00-23:30 at -03:00 is 23:00-02:30 UTC
-    Sun 2026-04-05 00:00-02:00 at -04:00 is 04:00-06:00 UTC
-    Mon 2026-04-06 09:00-13:00 at -04:00 is 13:00-17:00 UTC
-    Mon 2026-04-06 14:00-18:00 at -04:00 is 18:00-22:00 UTC
-  Clocks jump forward at the start of Sun 2026-09-06, so 00:00-01:00 doesn't exist:
-    Sat 2026-09-05 20:00-23:30 at -04:00 is 00:00-03:30 UTC
-    Sun 2026-09-06 01:00-02:00 at -03:00 is 04:00-05:00 UTC

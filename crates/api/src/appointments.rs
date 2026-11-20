@@ -10,20 +10,15 @@ use axum::extract::rejection::JsonRejection;
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use clinic_app::booking::{BookingRequest, book_appointment};
-use clinic_domain::access::{Role, ScheduleAccess};
+use clinic_domain::access::ScheduleAccess;
 use clinic_domain::appointment::{Appointment, AppointmentStatus};
 use clinic_domain::ids::{PatientId, PractitionerId};
 use serde::{Deserialize, Serialize};
 
+use crate::STAND_IN_CALLER;
 use crate::clinic_header::ClinicHeader;
 use crate::error::ApiError;
 use crate::state::AppState;
-
-/// Who every request acts as until login arrives in M4.
-///
-/// Every role may manage schedules today, so this changes no outcome. In M4 the caller's role
-/// comes from their token instead.
-const STAND_IN_CALLER: Role = Role::Receptionist;
 
 /// The JSON body of `POST /appointments`.
 ///

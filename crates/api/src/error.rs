@@ -9,12 +9,14 @@
 //! `error` is a stable code that clients can match on. `message` is for people and may change.
 
 use axum::Json;
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use clinic_app::agenda::AgendaError;
 use clinic_app::booking::BookAppointmentError;
 use clinic_domain::access::AccessDenied;
 use clinic_domain::schedule::BookingError;
+use clinic_domain::time_slot::TimeSlotError;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -36,12 +38,36 @@ pub enum ApiError {
         /// What axum found wrong with the body.
         message: String,
     },
+    /// A path parameter, such as the `{id}` in `/practitioners/{id}/agenda`, isn't what the route
+    /// expects. Keeps the status axum chose for it.
+    #[error("{message}")]
+    InvalidPath {
+        /// 400 for a value that doesn't parse. 500 if the route and the handler disagree on the
+        /// parameters, which is a bug in this crate.
+        status: StatusCode,
+        /// What axum found wrong with the path.
+        message: String,
+    },
+    /// The query string is missing a parameter, has a mistyped or unknown one, or doesn't parse.
+    #[error("{message}")]
+    InvalidQuery {
+        /// 400, the status axum chose for it.
+        status: StatusCode,
+        /// What axum found wrong with the query string.
+        message: String,
+    },
+    /// A requested span of time doesn't end after it starts.
+    #[error(transparent)]
+    InvalidRange(#[from] TimeSlotError),
     /// The caller's role may not do this.
     #[error(transparent)]
     AccessDenied(#[from] AccessDenied),
     /// The booking use case refused the request.
     #[error(transparent)]
     Booking(#[from] BookAppointmentError),
+    /// The agenda query refused the request.
+    #[error(transparent)]
+    Agenda(#[from] AgendaError),
     /// Something went wrong on the server's side. The details aren't shown to the client.
     #[error("internal server error")]
     Internal,
@@ -52,7 +78,10 @@ impl ApiError {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::MissingClinic | Self::InvalidClinic => StatusCode::BAD_REQUEST,
-            Self::InvalidBody { status, .. } => *status,
+            Self::InvalidBody { status, .. }
+            | Self::InvalidPath { status, .. }
+            | Self::InvalidQuery { status, .. } => *status,
+            Self::InvalidRange(_) => StatusCode::UNPROCESSABLE_ENTITY,
             Self::AccessDenied(_) => StatusCode::FORBIDDEN,
             Self::Booking(error) => match error {
                 BookAppointmentError::Booking(BookingError::Overlaps { .. }) => {
@@ -64,6 +93,9 @@ impl ApiError {
                     BookingError::OutOfRange | BookingError::OutsideWorkingHours,
                 ) => StatusCode::UNPROCESSABLE_ENTITY,
             },
+            // The practitioner is the path, so a missing one is a missing resource. Booking names
+            // the practitioner in its body instead, which is why it answers 422 above.
+            Self::Agenda(AgendaError::UnknownPractitioner) => StatusCode::NOT_FOUND,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -74,6 +106,9 @@ impl ApiError {
             Self::MissingClinic => "missing_clinic_id",
             Self::InvalidClinic => "invalid_clinic_id",
             Self::InvalidBody { .. } => "invalid_body",
+            Self::InvalidPath { .. } => "invalid_path",
+            Self::InvalidQuery { .. } => "invalid_query",
+            Self::InvalidRange(_) => "invalid_range",
             Self::AccessDenied(_) => "access_denied",
             Self::Booking(error) => match error {
                 BookAppointmentError::UnknownPractitioner => "unknown_practitioner",
@@ -84,6 +119,7 @@ impl ApiError {
                 }
                 BookAppointmentError::Booking(BookingError::Overlaps { .. }) => "overlaps",
             },
+            Self::Agenda(AgendaError::UnknownPractitioner) => "unknown_practitioner",
             Self::Internal => "internal",
         }
     }
@@ -92,6 +128,24 @@ impl ApiError {
 impl From<JsonRejection> for ApiError {
     fn from(rejection: JsonRejection) -> Self {
         Self::InvalidBody {
+            status: rejection.status(),
+            message: rejection.body_text(),
+        }
+    }
+}
+
+impl From<PathRejection> for ApiError {
+    fn from(rejection: PathRejection) -> Self {
+        Self::InvalidPath {
+            status: rejection.status(),
+            message: rejection.body_text(),
+        }
+    }
+}
+
+impl From<QueryRejection> for ApiError {
+    fn from(rejection: QueryRejection) -> Self {
+        Self::InvalidQuery {
             status: rejection.status(),
             message: rejection.body_text(),
         }

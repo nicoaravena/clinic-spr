@@ -77,7 +77,8 @@
   `compile_fail`, that passes only if it fails to compile. Used here to
   prove that fields are private.
 - **Composition root**: the one place where the app's parts are created
-  and wired together. Here, `main` in `crates/clinic`.
+  and wired together. Here, `main` in `crates/clinic`: it picks the
+  in-memory adapters, builds the router and serves it.
 - **Crate**: the unit Rust compiles: a library or a binary. `clinic-domain`
   is a library crate.
 - **Data transfer object (DTO)**: a type that describes a wire format and
@@ -99,9 +100,15 @@
   `book_appointment<S: ScheduleRepository>`. The compiler makes one copy per
   concrete type used (*monomorphization*), so calls are dispatched
   statically.
+- **Ephemeral port**: a free port the OS picks when a program asks to
+  listen on port 0. Tests use it so several servers can run at once.
 - **Golden file**: a file holding the exact output a program must produce.
   A test compares each run against it. Here,
-  `crates/clinic/tests/expected-output.txt`.
+  `crates/clinic/tests/expected-output.txt`, the transcript of the curl
+  walkthrough.
+- **Graceful shutdown**: stopping a server by first refusing new
+  connections, then letting the requests in progress finish, then exiting.
+  The opposite of killing it mid-request.
 - **Half-open interval**: a range that includes its start and excludes its
   end. Back-to-back slots don't overlap.
 - **Handler**: an async function that axum calls for a route. Its
@@ -137,6 +144,8 @@
   clock or calendar reading with no time zone, so not yet an instant.
 - **Newtype**: a tuple struct with one field that wraps another type, to give
   it a distinct type and its own rules. `ClinicId(u64)` is one.
+- **Path parameter**: a part of a route's path that varies, such as `{id}`
+  in `/practitioners/{id}/agenda`. axum's `Path` extractor reads it.
 - **Port**: a trait that says what a use case needs from the outside world,
   without saying how it is done, such as `ScheduleRepository`.
 - **Precise capturing**: `+ use<'a>` on an `impl Trait` return type, which
@@ -144,6 +153,9 @@
   captures every lifetime in scope.
 - **Query**: a use case that only reads, such as `practitioner_agenda`. It
   takes its ports by `&` and never saves.
+- **Query string**: the part of a URL after `?`, such as
+  `from=...&to=...`. axum's `Query` extractor reads it into a struct. In
+  it, `+` means a space, so a literal `+` is sent as `%2B`.
 - **Rejection**: the error an extractor returns when it can't build itself
   from a request. It implements `IntoResponse`.
 - **Repository**: a port that stores and finds one kind of domain object,
@@ -159,13 +171,17 @@
 - **`Sized` and `?Sized`**: `Sized` types have a size known at compile
   time. Type parameters are `Sized` unless marked `?Sized`, which lets them
   be a trait object such as `dyn ScheduleRepository`.
+- **Signal**: a message the OS sends a process. SIGINT is what Ctrl-C
+  sends; SIGTERM is what `kill` and `docker stop` send. Both ask the
+  `clinic` server to shut down gracefully.
 - **Smart constructor**: a function such as `new` or `parse` that checks its
   input and is the only way to build a type. Combined with private fields,
   it makes invalid values impossible to represent.
-- **Status code**: the number at the start of an HTTP response. Here: 201
-  booked, 400 bad header or malformed JSON, 403 role not allowed, 409
-  clashes with an existing appointment, 415 not JSON, 422 well-formed but
-  refused, 500 server fault.
+- **Status code**: the number at the start of an HTTP response. Here: 200
+  read, 201 booked, 400 bad header, path, query or malformed JSON, 403 role
+  not allowed, 404 no such practitioner in the path, 409 clashes with an
+  existing appointment, 415 not JSON, 422 well-formed but refused, 500
+  server fault.
 - **Trait**: a named set of methods, functions or constants that types can
   implement, such as `Capability`.
 - **Trait bound**: a requirement on a generic type, such as

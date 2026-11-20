@@ -21,16 +21,18 @@ Decisions:
 
 ## Progress
 
-Current step: **2.4**
+Current step: **2.5**
 
 ## How each step works
 
 1. **The agent writes the tests first**, then the code, keeping each step small enough to read in
    one sitting.
-2. **The agent extends the running clinic:** `main` in `crates/clinic` is one scripted day that
-   grows with every step. The agent adds what the new step makes possible, runs
-   `cargo run -p clinic`, and updates `crates/clinic/tests/expected-output.txt`. The diff of that
-   file shows what changed in the running app.
+2. **The agent extends the running clinic:** `crates/clinic` is the server, and
+   `crates/clinic/tests/walkthrough.rs` plays a curl walkthrough against it that grows with every
+   step. The agent adds requests for what the new step makes possible, runs
+   `UPDATE_EXPECTED=1 cargo test -p clinic --test walkthrough`, and reviews the diff of
+   `crates/clinic/tests/expected-output.txt`. That diff shows what changed in the running app.
+   (Until step 2.5, `main` played a scripted day and the same file held its output.)
 3. **The agent runs the checks:** `cargo fmt --check`,
    `cargo clippy --all-targets -- -D warnings`, `cargo test`, and confirms the expected tests ran.
 4. **The agent explains the step:** what changed, the Rust concepts involved, pointers to The Rust
@@ -50,7 +52,7 @@ crates/domain/          entities, value objects, rules; no I/O dependencies
 crates/app/             use cases and repository traits (from M2)
 crates/db/              sqlx adapters, migrations, tenant access (from M3)
 crates/api/             axum handlers, as a library (from M2)
-crates/clinic/          the binary and composition root: a scripted day until M2, then the server
+crates/clinic/          the binary and composition root: a scripted day until 2.5, then the server
 docs/ROADMAP.md         this file
 docs/book.toml, src/    the learning book (mdBook): step journal, reference, glossary
 ```
@@ -86,8 +88,8 @@ Delivers `POST /appointments` and `GET /practitioners/{id}/agenda`, working thro
 | 2.5 | `GET /practitioners/{id}/agenda`; the `clinic` binary serves HTTP; the scripted day becomes a curl walkthrough | composition root, graceful shutdown, integration tests over HTTP |
 | 2.6 | Endpoint to set a practitioner's weekly hours: a time zone name parsed to a `Tz`, expanded over a fixed horizon into their schedule | parsing at the edge, path extractors, `PUT` semantics |
 
-The `clinic` binary switches from its scripted day to serving HTTP, and the scripted day becomes a
-curl walkthrough.
+In step 2.5 the `clinic` binary switches from its scripted day to serving HTTP, and the scripted
+day becomes a curl walkthrough, checked by a test that runs it against the real binary.
 Concepts: traits as ports, generics vs `dyn`, `Arc`, `Mutex`, async/await, axum extractors, serde,
 and mapping domain errors to HTTP status codes.
 Appointment types are defined per clinic, so this milestone also needs somewhere to store and look
@@ -157,7 +159,7 @@ routing from `ClinicId` to a pool, so a large clinic can move to its own databas
 
 ## Verification
 
-- **Every step:** fmt, clippy and tests pass, `cargo run -p clinic` shows the new behavior, and the
+- **Every step:** fmt, clippy and tests pass, the walkthrough shows the new behavior, and the
   code is reviewed.
 - **M2 onward:** the milestone ends with a real run of the binary, exercised with curl.
 - **M3 onward:** integration tests run against real Postgres, including the cross-clinic isolation

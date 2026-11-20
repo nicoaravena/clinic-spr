@@ -11,23 +11,33 @@
 //! | Method and path | Handler |
 //! |---|---|
 //! | `POST /appointments` | [`appointments::book`] |
+//! | `GET /practitioners/{id}/agenda` | [`practitioners::agenda`] |
 //!
 //! Every route needs an `X-Clinic-Id` header naming the clinic, until login arrives in M4. See
 //! [`clinic_header`].
 
 use axum::Router;
-use axum::routing::post;
+use axum::routing::{get, post};
+use clinic_domain::access::Role;
 
 pub mod appointments;
 pub mod clinic_header;
 pub mod error;
+pub mod practitioners;
 pub mod state;
 
 use state::AppState;
+
+/// Who every request acts as until login arrives in M4.
+///
+/// Every role may manage schedules today, so this changes no outcome. In M4 the caller's role
+/// comes from their token instead.
+const STAND_IN_CALLER: Role = Role::Receptionist;
 
 /// Every route of the API, sharing `state`.
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/appointments", post(appointments::book))
+        .route("/practitioners/{id}/agenda", get(practitioners::agenda))
         .with_state(state)
 }

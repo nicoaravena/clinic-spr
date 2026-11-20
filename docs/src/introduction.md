@@ -28,12 +28,17 @@ From the repository root:
 cargo run -p clinic
 ```
 
-It prints a scripted day at one clinic: staff, appointment types, working
-hours, bookings that succeed and bookings that are refused, and who may
-access what. Every step extends that day, so the output grows with the
-project. The full expected output is in
-`crates/clinic/tests/expected-output.txt`, and a test checks it on every
-`cargo test`.
+It starts the HTTP server on `127.0.0.1:3000` with two demo clinics in
+memory (see [clinic](reference/clinic.md)). Ctrl-C stops it. The
+[walkthrough in step 2.5](steps/2.5-serving-http.md#see-it-run) lists curl
+commands to try against it: bookings that succeed and are refused, and
+practitioners' agendas. Every step extends that walkthrough. Its full
+transcript is in `crates/clinic/tests/expected-output.txt`, and a test
+replays it against the real binary on every `cargo test`.
+
+Until step 2.5, the same command printed a scripted day instead. The
+[interlude](steps/interlude-running-the-clinic.md) and the step pages up to
+2.3 show its output.
 
 ## Building the book
 

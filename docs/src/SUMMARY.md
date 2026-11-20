@@ -19,6 +19,7 @@
   - [2.2 The practitioner's agenda](steps/2.2-practitioner-agenda.md)
   - [2.3 Weekly hours and daylight saving](steps/2.3-weekly-hours.md)
   - [2.4 The HTTP API](steps/2.4-http-api.md)
+  - [2.5 Serving HTTP](steps/2.5-serving-http.md)
 
 # Reference
 
@@ -33,6 +34,7 @@
   - [clinical_note](reference/clinical_note.md)
   - [app (crate)](reference/app.md)
   - [api (crate)](reference/api.md)
+  - [clinic (binary)](reference/clinic.md)
 
 ---
 
