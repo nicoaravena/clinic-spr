@@ -3,7 +3,7 @@
 //! [`set_weekly_hours`] expands a [`WeeklyHours`] template over [`HORIZON_DAYS`] days from a
 //! local start date, and puts the result in the practitioner's schedule from the start of that
 //! date on. Earlier shifts stay as they were, and so do booked appointments: if one wouldn't fit
-//! the new hours, nothing is saved.
+//! the new hours, nothing is saved. Reading and saving the schedule happen in one session.
 
 use chrono::{Days, NaiveDate};
 use clinic_domain::access::ScheduleAccess;
@@ -12,7 +12,7 @@ use clinic_domain::schedule::{ReplaceHoursError, Schedule};
 use clinic_domain::working_hours::WorkingHours;
 use thiserror::Error;
 
-use crate::ports::{ScheduleRepository, StorageError};
+use crate::ports::{ScheduleRepository, Session, Storage, StorageError};
 use crate::weekly_hours::WeeklyHours;
 
 /// How many days of shifts one call expands, starting on its `from` date.
@@ -64,13 +64,13 @@ pub enum HoursOutcome {
 /// fit. Setting the same hours twice leaves the same schedule. If the new hours are refused,
 /// nothing is saved; if storage fails, the error says so. `access` proves the caller may manage
 /// schedules.
-pub async fn set_weekly_hours<S>(
-    schedules: &mut S,
+pub async fn set_weekly_hours<St>(
+    storage: &St,
     _access: &ScheduleAccess,
     request: SetHoursRequest,
 ) -> Result<HoursSet, SetHoursError>
 where
-    S: ScheduleRepository,
+    St: Storage + Sync,
 {
     let from = request.from;
     let until = from
@@ -86,7 +86,8 @@ where
 
     let shifts = request.hours.working_hours(from, until);
 
-    let (schedule, outcome) = match schedules.get(request.clinic, request.practitioner).await? {
+    let mut session = storage.begin(request.clinic).await?;
+    let (schedule, outcome) = match session.get(request.practitioner).await? {
         None => (Schedule::new(shifts.clone()), HoursOutcome::Created),
         Some(mut schedule) => {
             let cut = request.hours.day_start(from);
@@ -95,9 +96,8 @@ where
             (schedule, HoursOutcome::Replaced)
         }
     };
-    schedules
-        .save(request.clinic, request.practitioner, schedule)
-        .await?;
+    session.save(request.practitioner, schedule).await?;
+    session.commit().await?;
 
     Ok(HoursSet {
         outcome,
@@ -118,7 +118,7 @@ pub enum SetHoursError {
     /// The new hours would leave a booked appointment outside them.
     #[error(transparent)]
     Hours(#[from] ReplaceHoursError),
-    /// The schedule couldn't be read or saved.
+    /// A session couldn't begin, or the schedule couldn't be read, saved or committed.
     #[error(transparent)]
     Storage(#[from] StorageError),
 }

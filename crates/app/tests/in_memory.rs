@@ -1,13 +1,15 @@
+mod common;
+
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
-use clinic_app::in_memory::{
-    DuplicateAppointmentType, InMemoryAppointmentTypes, InMemorySchedules,
-};
-use clinic_app::ports::{AppointmentTypes, ScheduleRepository};
+use clinic_app::in_memory::{DuplicateAppointmentType, InMemoryAppointmentTypes, InMemoryStorage};
+use clinic_app::ports::{AppointmentTypes, ScheduleRepository, Storage};
 use clinic_domain::appointment::AppointmentType;
 use clinic_domain::ids::{ClinicId, PractitionerId};
 use clinic_domain::schedule::Schedule;
 use clinic_domain::time_slot::TimeSlot;
 use clinic_domain::working_hours::WorkingHours;
+
+use common::{save_committed, stored};
 
 fn at(hour: u32, minute: u32) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 3, 2, hour, minute, 0).unwrap()
@@ -22,104 +24,172 @@ fn consultation() -> AppointmentType {
 }
 
 #[tokio::test]
-async fn a_saved_schedule_can_be_read_back() {
-    let mut schedules = InMemorySchedules::new();
+async fn a_committed_schedule_can_be_read_back_by_a_later_session() {
+    let storage = InMemoryStorage::new(InMemoryAppointmentTypes::new());
 
-    schedules
-        .save(ClinicId::new(1), PractitionerId::new(1), mornings())
-        .await
-        .unwrap();
+    save_committed(
+        &storage,
+        ClinicId::new(1),
+        PractitionerId::new(1),
+        mornings(),
+    )
+    .await;
 
     assert_eq!(
-        schedules
-            .get(ClinicId::new(1), PractitionerId::new(1))
-            .await
-            .unwrap(),
+        stored(&storage, ClinicId::new(1), PractitionerId::new(1)).await,
         Some(mornings()),
     );
 }
 
 #[tokio::test]
 async fn an_unknown_practitioner_has_no_schedule() {
-    let schedules = InMemorySchedules::new();
+    let storage = InMemoryStorage::new(InMemoryAppointmentTypes::new());
 
     assert_eq!(
-        schedules
-            .get(ClinicId::new(1), PractitionerId::new(1))
-            .await
-            .unwrap(),
+        stored(&storage, ClinicId::new(1), PractitionerId::new(1)).await,
         None
     );
 }
 
 #[tokio::test]
-async fn saving_again_replaces_the_schedule() {
-    let mut schedules = InMemorySchedules::new();
-    let empty = Schedule::new(WorkingHours::new(Vec::new()).unwrap());
+async fn a_session_sees_its_own_uncommitted_save() {
+    let storage = InMemoryStorage::new(InMemoryAppointmentTypes::new());
+    let mut session = storage.begin(ClinicId::new(1)).await.unwrap();
 
-    schedules
-        .save(ClinicId::new(1), PractitionerId::new(1), mornings())
-        .await
-        .unwrap();
-    schedules
-        .save(ClinicId::new(1), PractitionerId::new(1), empty.clone())
+    session
+        .save(PractitionerId::new(1), mornings())
         .await
         .unwrap();
 
     assert_eq!(
-        schedules
-            .get(ClinicId::new(1), PractitionerId::new(1))
+        session.get(PractitionerId::new(1)).await.unwrap(),
+        Some(mornings()),
+    );
+}
+
+#[tokio::test]
+async fn a_session_dropped_without_commit_saves_nothing() {
+    let storage = InMemoryStorage::new(InMemoryAppointmentTypes::new());
+
+    {
+        let mut session = storage.begin(ClinicId::new(1)).await.unwrap();
+        session
+            .save(PractitionerId::new(1), mornings())
             .await
-            .unwrap(),
+            .unwrap();
+        // `session` is dropped here, without `commit`.
+    }
+
+    assert_eq!(
+        stored(&storage, ClinicId::new(1), PractitionerId::new(1)).await,
+        None
+    );
+}
+
+#[tokio::test]
+async fn a_dropped_session_keeps_the_earlier_schedule() {
+    let storage = InMemoryStorage::new(InMemoryAppointmentTypes::new());
+    let empty = Schedule::new(WorkingHours::new(Vec::new()).unwrap());
+    save_committed(
+        &storage,
+        ClinicId::new(1),
+        PractitionerId::new(1),
+        mornings(),
+    )
+    .await;
+
+    let mut session = storage.begin(ClinicId::new(1)).await.unwrap();
+    session.save(PractitionerId::new(1), empty).await.unwrap();
+    drop(session);
+
+    assert_eq!(
+        stored(&storage, ClinicId::new(1), PractitionerId::new(1)).await,
+        Some(mornings()),
+    );
+}
+
+#[tokio::test]
+async fn saving_again_replaces_the_schedule() {
+    let storage = InMemoryStorage::new(InMemoryAppointmentTypes::new());
+    let empty = Schedule::new(WorkingHours::new(Vec::new()).unwrap());
+
+    save_committed(
+        &storage,
+        ClinicId::new(1),
+        PractitionerId::new(1),
+        mornings(),
+    )
+    .await;
+    save_committed(
+        &storage,
+        ClinicId::new(1),
+        PractitionerId::new(1),
+        empty.clone(),
+    )
+    .await;
+
+    assert_eq!(
+        stored(&storage, ClinicId::new(1), PractitionerId::new(1)).await,
         Some(empty),
     );
 }
 
 #[tokio::test]
 async fn a_schedule_is_invisible_to_another_clinic() {
-    let mut schedules = InMemorySchedules::new();
+    let storage = InMemoryStorage::new(InMemoryAppointmentTypes::new());
 
-    schedules
-        .save(ClinicId::new(1), PractitionerId::new(1), mornings())
-        .await
-        .unwrap();
+    save_committed(
+        &storage,
+        ClinicId::new(1),
+        PractitionerId::new(1),
+        mornings(),
+    )
+    .await;
 
     // Same practitioner ID, different clinic.
     assert_eq!(
-        schedules
-            .get(ClinicId::new(2), PractitionerId::new(1))
-            .await
-            .unwrap(),
+        stored(&storage, ClinicId::new(2), PractitionerId::new(1)).await,
         None
+    );
+}
+
+#[tokio::test]
+async fn clones_of_the_storage_share_their_data() {
+    let storage = InMemoryStorage::new(InMemoryAppointmentTypes::new());
+    let clone = storage.clone();
+
+    save_committed(&clone, ClinicId::new(1), PractitionerId::new(1), mornings()).await;
+
+    assert_eq!(
+        stored(&storage, ClinicId::new(1), PractitionerId::new(1)).await,
+        Some(mornings()),
     );
 }
 
 #[tokio::test]
 async fn an_added_appointment_type_can_be_found_by_name() {
     let mut types = InMemoryAppointmentTypes::new();
-
     types.add(ClinicId::new(1), consultation()).unwrap();
+    let storage = InMemoryStorage::new(types);
+
+    let session = storage.begin(ClinicId::new(1)).await.unwrap();
 
     assert_eq!(
-        types.find(ClinicId::new(1), "Consultation").await.unwrap(),
-        Some(consultation()),
+        session.find("Consultation").await.unwrap(),
+        Some(consultation())
     );
-    assert_eq!(
-        types.find(ClinicId::new(1), "Follow-up").await.unwrap(),
-        None
-    );
+    assert_eq!(session.find("Follow-up").await.unwrap(), None);
 }
 
 #[tokio::test]
 async fn an_appointment_type_is_invisible_to_another_clinic() {
     let mut types = InMemoryAppointmentTypes::new();
-
     types.add(ClinicId::new(1), consultation()).unwrap();
+    let storage = InMemoryStorage::new(types);
 
-    assert_eq!(
-        types.find(ClinicId::new(2), "Consultation").await.unwrap(),
-        None
-    );
+    let session = storage.begin(ClinicId::new(2)).await.unwrap();
+
+    assert_eq!(session.find("Consultation").await.unwrap(), None);
 }
 
 #[tokio::test]
@@ -131,8 +201,12 @@ async fn refuses_a_duplicate_name_within_a_clinic() {
     let error = types.add(ClinicId::new(1), longer).unwrap_err();
 
     assert_eq!(error.name(), "Consultation");
+    let session = InMemoryStorage::new(types)
+        .begin(ClinicId::new(1))
+        .await
+        .unwrap();
     assert_eq!(
-        types.find(ClinicId::new(1), "Consultation").await.unwrap(),
+        session.find("Consultation").await.unwrap(),
         Some(consultation()),
         "the first type must be kept",
     );

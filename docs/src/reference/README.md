@@ -18,7 +18,8 @@ Only `clinic` depends on all of them, to wire them together.
 The domain depends on nothing else in the workspace, and `app` depends only
 on the domain. The domain's only external
 dependencies are `chrono`, without the system clock, and `thiserror`, which
-generates error boilerplate at compile time. `app` adds `chrono-tz`. Only
+generates error boilerplate at compile time. `app` adds `chrono-tz`, and tokio's `sync` feature for the in-memory
+storage's lock. Only
 `api` uses `serde`, and it defines every route with `axum`. `clinic` uses
 `axum` only to serve the router, and it's the only crate that starts a tokio
 runtime.

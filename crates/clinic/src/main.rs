@@ -1,6 +1,6 @@
-//! The clinic server, and the composition root: the one place that picks the adapters, builds the
-//! router from `clinic_api` and serves it. The adapters are named only here, in `seed`: the
-//! router is generic over them.
+//! The clinic server, and the composition root: the one place that picks the storage, builds the
+//! router from `clinic_api` and serves it. The storage is named only here, in `seed`: the router
+//! is generic over it.
 //!
 //! Configuration comes from the environment:
 //!

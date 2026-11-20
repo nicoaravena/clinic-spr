@@ -1,7 +1,9 @@
 //! Booking an appointment: the first use case.
 //!
-//! [`book_appointment`] looks up what it needs through the ports, lets the domain's
-//! [`Schedule::book`](clinic_domain::schedule::Schedule::book) decide, and saves the result.
+//! [`book_appointment`] begins a session at the clinic, looks up what it needs through the
+//! session's ports, lets the domain's [`Schedule::book`](clinic_domain::schedule::Schedule::book)
+//! decide, saves the result, and commits. The session makes the whole read-modify-write one unit
+//! of work.
 
 use chrono::{DateTime, Utc};
 use clinic_domain::access::ScheduleAccess;
@@ -10,7 +12,7 @@ use clinic_domain::ids::{ClinicId, PatientId, PractitionerId};
 use clinic_domain::schedule::BookingError;
 use thiserror::Error;
 
-use crate::ports::{AppointmentTypes, ScheduleRepository, StorageError};
+use crate::ports::{AppointmentTypes, ScheduleRepository, Session, Storage, StorageError};
 
 /// What to book, for whom, with whom, and when.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,33 +37,32 @@ pub struct BookingRequest<'a> {
 /// 2. The clinic must offer the named appointment type.
 /// 3. The domain's booking rules must accept it.
 ///
-/// Storage can fail at any of them, or when saving. The booking is only returned once it's saved,
-/// and if a check fails nothing is saved. `access` proves the caller may manage schedules.
-pub async fn book_appointment<S, T>(
-    schedules: &mut S,
-    types: &T,
+/// Storage can fail at any of them, or when beginning, saving or committing. The booking is only
+/// returned once it's committed. If a check fails, the session is dropped and nothing is saved.
+/// `access` proves the caller may manage schedules.
+pub async fn book_appointment<St>(
+    storage: &St,
     _access: &ScheduleAccess,
     request: BookingRequest<'_>,
 ) -> Result<Appointment, BookAppointmentError>
 where
-    S: ScheduleRepository,
-    T: AppointmentTypes,
+    St: Storage + Sync,
 {
-    let mut schedule = schedules
-        .get(request.clinic, request.practitioner)
+    let mut session = storage.begin(request.clinic).await?;
+    let mut schedule = session
+        .get(request.practitioner)
         .await?
         .ok_or(BookAppointmentError::UnknownPractitioner)?;
-    let appointment_type = types
-        .find(request.clinic, request.appointment_type)
+    let appointment_type = session
+        .find(request.appointment_type)
         .await?
         .ok_or(BookAppointmentError::UnknownAppointmentType)?;
 
     let appointment = schedule
         .book(request.patient, request.start, appointment_type)?
         .clone();
-    schedules
-        .save(request.clinic, request.practitioner, schedule)
-        .await?;
+    session.save(request.practitioner, schedule).await?;
+    session.commit().await?;
 
     Ok(appointment)
 }
@@ -80,7 +81,8 @@ pub enum BookAppointmentError {
     /// The domain's booking rules refused it.
     #[error(transparent)]
     Booking(#[from] BookingError),
-    /// The schedule or the appointment types couldn't be read, or the booking couldn't be saved.
+    /// A session couldn't begin, the schedule or the appointment types couldn't be read, or the
+    /// booking couldn't be saved or committed.
     #[error(transparent)]
     Storage(#[from] StorageError),
 }

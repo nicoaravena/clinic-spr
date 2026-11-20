@@ -1,13 +1,16 @@
+mod common;
+
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use clinic_app::agenda::{AgendaError, AgendaQuery, practitioner_agenda};
-use clinic_app::in_memory::InMemorySchedules;
-use clinic_app::ports::ScheduleRepository;
+use clinic_app::in_memory::InMemoryStorage;
 use clinic_domain::access::{Role, ScheduleAccess};
 use clinic_domain::appointment::{AppointmentStatus, AppointmentType};
 use clinic_domain::ids::{ClinicId, PatientId, PractitionerId};
 use clinic_domain::schedule::Schedule;
 use clinic_domain::time_slot::TimeSlot;
 use clinic_domain::working_hours::WorkingHours;
+
+use common::save_committed;
 
 fn clinic() -> ClinicId {
     ClinicId::new(1)
@@ -35,7 +38,7 @@ fn access() -> ScheduleAccess {
 
 /// Ana works 09:00-12:00 at clinic 1, with consultations at 09:00 for patient 7 and at 11:00 for
 /// patient 8.
-async fn seeded() -> InMemorySchedules {
+async fn seeded() -> InMemoryStorage {
     let hours = WorkingHours::new(vec![slot(at(9, 0), at(12, 0))]).unwrap();
     let mut schedule = Schedule::new(hours);
     schedule
@@ -45,9 +48,9 @@ async fn seeded() -> InMemorySchedules {
         .book(PatientId::new(8), at(11, 0), consultation())
         .unwrap();
 
-    let mut schedules = InMemorySchedules::new();
-    schedules.save(clinic(), ana(), schedule).await.unwrap();
-    schedules
+    let storage = InMemoryStorage::default();
+    save_committed(&storage, clinic(), ana(), schedule).await;
+    storage
 }
 
 fn query(range: TimeSlot) -> AgendaQuery {
@@ -60,9 +63,9 @@ fn query(range: TimeSlot) -> AgendaQuery {
 
 #[tokio::test]
 async fn returns_the_appointments_in_the_range_sorted_by_start() {
-    let schedules = seeded().await;
+    let storage = seeded().await;
 
-    let agenda = practitioner_agenda(&schedules, &access(), query(slot(at(9, 0), at(12, 0))))
+    let agenda = practitioner_agenda(&storage, &access(), query(slot(at(9, 0), at(12, 0))))
         .await
         .unwrap();
 
@@ -77,9 +80,9 @@ async fn returns_the_appointments_in_the_range_sorted_by_start() {
 
 #[tokio::test]
 async fn leaves_out_appointments_outside_the_range() {
-    let schedules = seeded().await;
+    let storage = seeded().await;
 
-    let agenda = practitioner_agenda(&schedules, &access(), query(slot(at(10, 0), at(12, 0))))
+    let agenda = practitioner_agenda(&storage, &access(), query(slot(at(10, 0), at(12, 0))))
         .await
         .unwrap();
 
@@ -89,9 +92,9 @@ async fn leaves_out_appointments_outside_the_range() {
 
 #[tokio::test]
 async fn a_range_with_no_appointments_gives_an_empty_agenda() {
-    let schedules = seeded().await;
+    let storage = seeded().await;
 
-    let agenda = practitioner_agenda(&schedules, &access(), query(slot(at(9, 30), at(11, 0))))
+    let agenda = practitioner_agenda(&storage, &access(), query(slot(at(9, 30), at(11, 0))))
         .await
         .unwrap();
 
@@ -100,13 +103,13 @@ async fn a_range_with_no_appointments_gives_an_empty_agenda() {
 
 #[tokio::test]
 async fn refuses_an_unknown_practitioner() {
-    let schedules = seeded().await;
+    let storage = seeded().await;
     let query = AgendaQuery {
         practitioner: PractitionerId::new(2),
         ..query(slot(at(9, 0), at(12, 0)))
     };
 
-    let result = practitioner_agenda(&schedules, &access(), query).await;
+    let result = practitioner_agenda(&storage, &access(), query).await;
 
     assert!(
         matches!(result, Err(AgendaError::UnknownPractitioner)),
@@ -116,13 +119,13 @@ async fn refuses_an_unknown_practitioner() {
 
 #[tokio::test]
 async fn cannot_read_another_clinics_agenda() {
-    let schedules = seeded().await;
+    let storage = seeded().await;
     let query = AgendaQuery {
         clinic: ClinicId::new(2),
         ..query(slot(at(9, 0), at(12, 0)))
     };
 
-    let result = practitioner_agenda(&schedules, &access(), query).await;
+    let result = practitioner_agenda(&storage, &access(), query).await;
 
     assert!(
         matches!(result, Err(AgendaError::UnknownPractitioner)),
@@ -135,13 +138,13 @@ async fn the_agenda_future_can_move_between_threads() {
     fn assert_send<F: Send>(future: F) -> F {
         future
     }
-    let schedules = seeded().await;
+    let storage = seeded().await;
 
     // The future borrows its arguments until it's awaited, so `access` needs a name.
     let access = access();
 
     // A multi-threaded runtime such as axum's may resume the future on another thread.
-    let agenda = practitioner_agenda(&schedules, &access, query(slot(at(9, 0), at(12, 0))));
+    let agenda = practitioner_agenda(&storage, &access, query(slot(at(9, 0), at(12, 0))));
 
     assert_eq!(assert_send(agenda).await.unwrap().len(), 2);
 }

@@ -1,4 +1,7 @@
-//! What the use cases do when storage fails: they stop and pass the [`StorageError`] on.
+//! What the use cases do when storage fails: they stop, pass the [`StorageError`] on, and leave
+//! nothing saved.
+
+mod common;
 
 use std::error::Error;
 
@@ -7,8 +10,8 @@ use chrono_tz::America::Santiago;
 use clinic_app::agenda::{AgendaError, AgendaQuery, practitioner_agenda};
 use clinic_app::booking::{BookAppointmentError, BookingRequest, book_appointment};
 use clinic_app::hours::{SetHoursError, SetHoursRequest, set_weekly_hours};
-use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemorySchedules};
-use clinic_app::ports::{AppointmentTypes, ScheduleRepository, StorageError};
+use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemorySession, InMemoryStorage};
+use clinic_app::ports::{AppointmentTypes, ScheduleRepository, Session, Storage, StorageError};
 use clinic_app::weekly_hours::{WeeklyHours, WeeklyShift};
 use clinic_domain::access::{Role, ScheduleAccess};
 use clinic_domain::appointment::AppointmentType;
@@ -17,57 +20,78 @@ use clinic_domain::schedule::Schedule;
 use clinic_domain::time_slot::TimeSlot;
 use clinic_domain::working_hours::WorkingHours;
 
-/// Storage that can't be reached: every call fails.
-struct Unreachable;
+use common::{save_committed, stored};
 
-impl ScheduleRepository for Unreachable {
-    async fn get(
-        &self,
-        _clinic: ClinicId,
-        _practitioner: PractitionerId,
-    ) -> Result<Option<Schedule>, StorageError> {
+/// The step a [`Faulty`] storage fails at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Step {
+    Begin,
+    Get,
+    Find,
+    Save,
+    Commit,
+}
+
+/// In-memory storage, except that one step always fails with "connection refused".
+struct Faulty {
+    inner: InMemoryStorage,
+    failing: Step,
+}
+
+/// A session of a [`Faulty`] storage.
+struct FaultySession {
+    inner: InMemorySession,
+    failing: Step,
+}
+
+/// Fails if `step` is the one that's `failing`.
+fn check(failing: Step, step: Step) -> Result<(), StorageError> {
+    if failing == step {
         Err(StorageError::new("connection refused"))
+    } else {
+        Ok(())
+    }
+}
+
+impl Storage for Faulty {
+    type Session = FaultySession;
+
+    async fn begin(&self, clinic: ClinicId) -> Result<FaultySession, StorageError> {
+        check(self.failing, Step::Begin)?;
+        Ok(FaultySession {
+            inner: self.inner.begin(clinic).await?,
+            failing: self.failing,
+        })
+    }
+}
+
+impl ScheduleRepository for FaultySession {
+    async fn get(&self, practitioner: PractitionerId) -> Result<Option<Schedule>, StorageError> {
+        check(self.failing, Step::Get)?;
+        self.inner.get(practitioner).await
     }
 
     async fn save(
         &mut self,
-        _clinic: ClinicId,
-        _practitioner: PractitionerId,
-        _schedule: Schedule,
-    ) -> Result<(), StorageError> {
-        Err(StorageError::new("connection refused"))
-    }
-}
-
-impl AppointmentTypes for Unreachable {
-    async fn find(
-        &self,
-        _clinic: ClinicId,
-        _name: &str,
-    ) -> Result<Option<AppointmentType>, StorageError> {
-        Err(StorageError::new("connection refused"))
-    }
-}
-
-/// Schedules that can be read but not written: `get` reads the wrapped schedules, `save` fails.
-struct ReadOnly(InMemorySchedules);
-
-impl ScheduleRepository for ReadOnly {
-    async fn get(
-        &self,
-        clinic: ClinicId,
         practitioner: PractitionerId,
-    ) -> Result<Option<Schedule>, StorageError> {
-        self.0.get(clinic, practitioner).await
-    }
-
-    async fn save(
-        &mut self,
-        _clinic: ClinicId,
-        _practitioner: PractitionerId,
-        _schedule: Schedule,
+        schedule: Schedule,
     ) -> Result<(), StorageError> {
-        Err(StorageError::new("disk full"))
+        check(self.failing, Step::Save)?;
+        self.inner.save(practitioner, schedule).await
+    }
+}
+
+impl AppointmentTypes for FaultySession {
+    async fn find(&self, name: &str) -> Result<Option<AppointmentType>, StorageError> {
+        check(self.failing, Step::Find)?;
+        self.inner.find(name).await
+    }
+}
+
+impl Session for FaultySession {
+    async fn commit(self) -> Result<(), StorageError> {
+        check(self.failing, Step::Commit)?;
+        self.inner.commit().await
     }
 }
 
@@ -87,20 +111,17 @@ fn access() -> ScheduleAccess {
     Role::Receptionist.grant().unwrap()
 }
 
-/// Ana works 09:00-12:00 at clinic 1, which offers a 30-minute consultation.
-async fn seeded() -> (InMemorySchedules, InMemoryAppointmentTypes) {
-    let mut schedules = InMemorySchedules::new();
-    let hours = WorkingHours::new(vec![TimeSlot::new(at(9, 0), at(12, 0)).unwrap()]).unwrap();
-    schedules
-        .save(clinic(), ana(), Schedule::new(hours))
-        .await
-        .unwrap();
-
+/// Ana works 09:00-12:00 at clinic 1, which offers a 30-minute consultation, and `failing` fails.
+async fn seeded(failing: Step) -> Faulty {
     let mut types = InMemoryAppointmentTypes::new();
     let consultation = AppointmentType::new("Consultation", TimeDelta::minutes(30)).unwrap();
     types.add(clinic(), consultation).unwrap();
 
-    (schedules, types)
+    let inner = InMemoryStorage::new(types);
+    let hours = WorkingHours::new(vec![TimeSlot::new(at(9, 0), at(12, 0)).unwrap()]).unwrap();
+    save_committed(&inner, clinic(), ana(), Schedule::new(hours)).await;
+
+    Faulty { inner, failing }
 }
 
 fn booking() -> BookingRequest<'static> {
@@ -110,6 +131,14 @@ fn booking() -> BookingRequest<'static> {
         patient: PatientId::new(7),
         appointment_type: "Consultation",
         start: at(9, 0),
+    }
+}
+
+fn agenda() -> AgendaQuery {
+    AgendaQuery {
+        clinic: clinic(),
+        practitioner: ana(),
+        range: TimeSlot::new(at(9, 0), at(12, 0)).unwrap(),
     }
 }
 
@@ -129,77 +158,64 @@ fn mondays() -> SetHoursRequest {
 }
 
 #[tokio::test]
-async fn booking_fails_when_schedules_are_unreachable() {
-    let (_, types) = seeded().await;
+async fn booking_fails_at_every_step_that_storage_fails_and_saves_nothing() {
+    for failing in [Step::Begin, Step::Get, Step::Find, Step::Save, Step::Commit] {
+        let storage = seeded(failing).await;
 
-    let result = book_appointment(&mut Unreachable, &types, &access(), booking()).await;
+        let result = book_appointment(&storage, &access(), booking()).await;
 
-    assert!(
-        matches!(result, Err(BookAppointmentError::Storage(_))),
-        "{result:?}"
-    );
+        assert!(
+            matches!(result, Err(BookAppointmentError::Storage(_))),
+            "{failing:?}: {result:?}"
+        );
+        let saved = stored(&storage.inner, clinic(), ana()).await.unwrap();
+        assert!(saved.appointments().is_empty(), "{failing:?}");
+    }
 }
 
 #[tokio::test]
-async fn booking_fails_when_appointment_types_are_unreachable() {
-    let (mut schedules, _) = seeded().await;
+async fn the_agenda_fails_when_a_session_cant_begin_or_read() {
+    for failing in [Step::Begin, Step::Get] {
+        let storage = seeded(failing).await;
 
-    let result = book_appointment(&mut schedules, &Unreachable, &access(), booking()).await;
+        let result = practitioner_agenda(&storage, &access(), agenda()).await;
 
-    assert!(
-        matches!(result, Err(BookAppointmentError::Storage(_))),
-        "{result:?}"
-    );
+        assert!(
+            matches!(result, Err(AgendaError::Storage(_))),
+            "{failing:?}: {result:?}"
+        );
+    }
 }
 
 #[tokio::test]
-async fn a_booking_that_cant_be_saved_is_an_error_not_a_success() {
-    let (schedules, types) = seeded().await;
-    let mut schedules = ReadOnly(schedules);
+async fn the_agenda_reads_without_committing() {
+    let storage = seeded(Step::Commit).await;
 
-    let result = book_appointment(&mut schedules, &types, &access(), booking()).await;
+    let result = practitioner_agenda(&storage, &access(), agenda()).await;
 
-    assert!(
-        matches!(result, Err(BookAppointmentError::Storage(_))),
-        "{result:?}"
-    );
-    let stored = schedules.0.get(clinic(), ana()).await.unwrap().unwrap();
-    assert!(stored.appointments().is_empty());
+    assert!(result.is_ok(), "{result:?}");
 }
 
 #[tokio::test]
-async fn the_agenda_fails_when_schedules_are_unreachable() {
-    let query = AgendaQuery {
-        clinic: clinic(),
-        practitioner: ana(),
-        range: TimeSlot::new(at(9, 0), at(12, 0)).unwrap(),
-    };
+async fn setting_hours_fails_at_every_step_that_storage_fails_and_saves_nothing() {
+    for failing in [Step::Begin, Step::Get, Step::Save, Step::Commit] {
+        let storage = Faulty {
+            inner: InMemoryStorage::default(),
+            failing,
+        };
 
-    let result = practitioner_agenda(&Unreachable, &access(), query).await;
+        let result = set_weekly_hours(&storage, &access(), mondays()).await;
 
-    assert!(matches!(result, Err(AgendaError::Storage(_))), "{result:?}");
-}
-
-#[tokio::test]
-async fn setting_hours_fails_when_schedules_are_unreachable() {
-    let result = set_weekly_hours(&mut Unreachable, &access(), mondays()).await;
-
-    assert!(
-        matches!(result, Err(SetHoursError::Storage(_))),
-        "{result:?}"
-    );
-}
-
-#[tokio::test]
-async fn hours_that_cant_be_saved_are_an_error_not_a_success() {
-    let mut schedules = ReadOnly(InMemorySchedules::new());
-
-    let result = set_weekly_hours(&mut schedules, &access(), mondays()).await;
-
-    assert!(
-        matches!(result, Err(SetHoursError::Storage(_))),
-        "{result:?}"
-    );
+        assert!(
+            matches!(result, Err(SetHoursError::Storage(_))),
+            "{failing:?}: {result:?}"
+        );
+        assert_eq!(
+            stored(&storage.inner, clinic(), ana()).await,
+            None,
+            "{failing:?}"
+        );
+    }
 }
 
 #[test]

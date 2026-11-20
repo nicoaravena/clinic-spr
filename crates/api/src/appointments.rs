@@ -10,7 +10,7 @@ use axum::extract::rejection::JsonRejection;
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use clinic_app::booking::{BookingRequest, book_appointment};
-use clinic_app::ports::{AppointmentTypes, ScheduleRepository};
+use clinic_app::ports::Storage;
 use clinic_domain::access::ScheduleAccess;
 use clinic_domain::appointment::{Appointment, AppointmentStatus};
 use clinic_domain::ids::{PatientId, PractitionerId};
@@ -85,15 +85,14 @@ fn status_name(status: AppointmentStatus) -> &'static str {
 /// The body is taken as a `Result` so a bad body becomes an [`ApiError`] with the same JSON shape
 /// as every other error, instead of axum's plain-text rejection.
 ///
-/// `S` and `T` are the adapters in the [`AppState`]; [`router`](crate::router) picks them.
-pub async fn book<S, T>(
-    State(state): State<AppState<S, T>>,
+/// `St` is the storage in the [`AppState`]; [`router`](crate::router) picks it.
+pub async fn book<St>(
+    State(state): State<AppState<St>>,
     ClinicHeader(clinic): ClinicHeader,
     body: Result<Json<BookAppointmentBody>, JsonRejection>,
 ) -> Result<(StatusCode, Json<AppointmentBody>), ApiError>
 where
-    S: ScheduleRepository + Send + Sync + 'static,
-    T: AppointmentTypes + Send + Sync + 'static,
+    St: Storage + Send + Sync + 'static,
 {
     let Json(body) = body?;
     let access: ScheduleAccess = STAND_IN_CALLER.grant()?;
@@ -106,13 +105,7 @@ where
         start: body.start,
     };
 
-    // The lock is held from reading the schedule to saving it, so two requests for the same slot
-    // can't both see it free. It's held across the `.await`s on the ports, which is why it's
-    // tokio's mutex (see `state`), and released when `store` is dropped at the end of the function.
-    let mut store = state.lock().await;
-    let store = &mut *store;
-    let appointment =
-        book_appointment(&mut store.schedules, &store.types, &access, request).await?;
+    let appointment = book_appointment(state.storage(), &access, request).await?;
 
     Ok((
         StatusCode::CREATED,

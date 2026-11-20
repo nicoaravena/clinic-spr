@@ -59,8 +59,8 @@ and loses every booking when it stops:
 | 1 | Consultation (30 min), Follow-up (15 min) | 1: works 09:00-12:00 and 13:00-17:00 UTC on Monday 2026-03-02, nothing booked |
 | 2 | Consultation (30 min) | none |
 
-The seed is saved through the same async `ScheduleRepository::save` the
-use cases call, so a seed that couldn't be saved stops the server from
+The seed is saved through a session, begun and committed like the use
+cases' own, so a seed that couldn't be saved stops the server from
 starting.
 
 Clinic 2 is there to show that one clinic can't reach another's data.

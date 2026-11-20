@@ -61,14 +61,14 @@
 ## Rust and design
 
 - **Adapter**: a type that implements a port for one technology, such as
-  `InMemorySchedules`. Swapping the adapter doesn't change the use case.
+  `InMemoryStorage`. Swapping the adapter doesn't change the use case.
 - **`Arc`**: an atomically reference-counted pointer. Clones share one
   value, which is dropped when the last clone goes. It hands out only `&`,
   so changing the value needs something like a `Mutex` inside.
 - **Associated const**: a constant declared in a trait that each
   implementation must provide, such as `Capability::NAME`.
 - **Associated type**: a type declared in a trait that each implementation
-  chooses, such as `FromRequestParts::Rejection`.
+  chooses, such as `FromRequestParts::Rejection` or `Storage::Session`.
 - **`async fn`**: a function that returns a future instead of running. Its
   body runs when the future is polled and can pause at each `.await`.
 - **`async fn` in a trait**: a trait method that returns a future. Declared
@@ -81,6 +81,8 @@
 - **Borrow checker**: the part of the compiler that enforces borrowing
   rules: many `&` or one `&mut` at a time, and no reference outliving its
   value.
+- **Commit**: ending a unit of work by keeping its changes. `Session::commit`
+  takes the session by value, so it can't be used afterwards.
 - **Compile-fail doctest**: a code example in a doc comment, marked
   `compile_fail`, that passes only if it fails to compile. Used here to
   prove that fields are private.
@@ -96,6 +98,10 @@
   implementations, such as `Debug` or `PartialEq`, for a type.
 - **Derive macro**: a library-provided `derive`, such as `thiserror`'s
   `Error`, that generates code for a type at compile time.
+- **`Drop`**: the trait whose `drop` method runs when a value goes out of
+  scope. A type without `impl Drop` still drops its fields, which is how an
+  `InMemorySession` releases its lock and discards what it saved. A type
+  that implements `Drop` can't be taken apart with a pattern.
 - **Dyn compatible**: a trait that can be used as a trait object
   (`dyn Trait`), formerly called "object safe". A trait whose methods
   return `impl Trait`, as async ones do, isn't: the compiler couldn't know
@@ -162,8 +168,10 @@
   mutex is *poisoned* if a thread panics while holding it, and its guard
   isn't `Send`, so it can't be held across an `.await` in a future that
   must be `Send`. tokio's `Mutex` is locked with `.lock().await`, can be
-  held across `.await`, and isn't poisoned. The api crate uses tokio's since
-  step 3.1.
+  held across `.await`, and isn't poisoned. Its `lock_owned` takes an
+  `Arc<Mutex<_>>` and returns an `OwnedMutexGuard`, which borrows nothing
+  and can be kept in a struct. The api crate used tokio's in step 3.1; the
+  in-memory storage uses it from step 3.2.
 - **Naive time**: chrono's `NaiveTime`, `NaiveDate` and `NaiveDateTime`: a
   clock or calendar reading with no time zone, so not yet an instant.
 - **Newtype**: a tuple struct with one field that wraps another type, to give
@@ -190,6 +198,8 @@
   from a request. It implements `IntoResponse`.
 - **Repository**: a port that stores and finds one kind of domain object,
   as if it were an in-memory collection.
+- **Rollback**: ending a unit of work by discarding its changes. A session
+  rolls back when it's dropped without being committed.
 - **Runtime (async)**: the library that polls futures and schedules them
   on threads. Rust doesn't ship one; this project uses tokio.
 - **`?` operator**: unwraps an `Ok` or `Some`, or returns the `Err` or
@@ -214,6 +224,10 @@
   malformed JSON, 403 role not allowed, 404 no such practitioner in the
   path, 409 clashes with an existing appointment, 415 not JSON, 422
   well-formed but refused, 500 server fault.
+- **Session**: a unit of work at one clinic, begun with `Storage::begin`.
+  It implements the ports, so a use case reads and writes through it, and
+  it ends with `commit` or by being dropped. In M3 a session wraps a
+  database transaction.
 - **Storage error**: `StorageError`, what a port returns when its storage
   can't be read or written. Its message is always "storage failed"; the
   cause is its error source, logged by the server and never sent to a
@@ -225,6 +239,8 @@
 - **Trait object**: `dyn Trait`, a value whose concrete type is known only
   at runtime, used behind a pointer such as `Box`. `Box<dyn Error>` holds
   any error.
+- **Unit of work**: a group of reads and writes that succeed or fail
+  together. A use case's session is one.
 - **Use case**: one thing the application does for a user, such as
   booking an appointment, written as a function over ports. It lives in
   `crates/app`.

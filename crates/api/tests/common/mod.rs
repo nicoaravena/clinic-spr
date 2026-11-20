@@ -9,8 +9,8 @@ use axum::http::{Request, StatusCode};
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use clinic_api::router;
 use clinic_api::state::AppState;
-use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemorySchedules};
-use clinic_app::ports::ScheduleRepository;
+use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemoryStorage};
+use clinic_app::ports::{ScheduleRepository, Session, Storage};
 use clinic_domain::appointment::AppointmentType;
 use clinic_domain::ids::{ClinicId, PractitionerId};
 use clinic_domain::schedule::Schedule;
@@ -27,23 +27,21 @@ pub(crate) fn at(hour: u32, minute: u32) -> DateTime<Utc> {
 /// Clinic 1: practitioner 1 works 09:00-12:00 UTC on 2026-03-02 and the clinic offers a 30-minute
 /// "Consultation". Clinic 2 offers "Consultation" too but has no schedules.
 pub(crate) async fn app() -> Router {
-    let mut schedules = InMemorySchedules::new();
-    let hours = WorkingHours::new(vec![TimeSlot::new(at(9, 0), at(12, 0)).unwrap()]).unwrap();
-    schedules
-        .save(
-            ClinicId::new(1),
-            PractitionerId::new(1),
-            Schedule::new(hours),
-        )
-        .await
-        .unwrap();
-
     let mut types = InMemoryAppointmentTypes::new();
     let consultation = AppointmentType::new("Consultation", TimeDelta::minutes(30)).unwrap();
     types.add(ClinicId::new(1), consultation.clone()).unwrap();
     types.add(ClinicId::new(2), consultation).unwrap();
+    let storage = InMemoryStorage::new(types);
 
-    router(AppState::new(schedules, types))
+    let hours = WorkingHours::new(vec![TimeSlot::new(at(9, 0), at(12, 0)).unwrap()]).unwrap();
+    let mut session = storage.begin(ClinicId::new(1)).await.unwrap();
+    session
+        .save(PractitionerId::new(1), Schedule::new(hours))
+        .await
+        .unwrap();
+    session.commit().await.unwrap();
+
+    router(AppState::new(storage))
 }
 
 /// The body of `POST /appointments` for a Consultation with practitioner 1 for patient 7.

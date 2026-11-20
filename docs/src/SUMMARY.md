@@ -22,6 +22,7 @@
   - [2.5 Serving HTTP](steps/2.5-serving-http.md)
   - [2.6 Setting weekly hours over HTTP](steps/2.6-weekly-hours-endpoint.md)
   - [3.1 Async, fallible ports](steps/3.1-async-ports.md)
+  - [3.2 Tenant sessions](steps/3.2-tenant-sessions.md)
 
 # Reference
 

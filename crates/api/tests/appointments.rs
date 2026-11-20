@@ -8,7 +8,7 @@ use clinic_api::state::AppState;
 use clinic_app::agenda::AgendaError;
 use clinic_app::booking::BookAppointmentError;
 use clinic_app::hours::SetHoursError;
-use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemorySchedules};
+use clinic_app::in_memory::InMemoryStorage;
 use clinic_app::ports::StorageError;
 use clinic_domain::access::{ClinicalAccess, Role};
 use clinic_domain::schedule::BookingError;
@@ -311,5 +311,5 @@ fn every_api_error_has_its_documented_status_and_code() {
 fn app_state_can_be_shared_between_tasks_and_threads() {
     fn assert_shareable<T: Clone + Send + Sync + 'static>() {}
 
-    assert_shareable::<AppState<InMemorySchedules, InMemoryAppointmentTypes>>();
+    assert_shareable::<AppState<InMemoryStorage>>();
 }

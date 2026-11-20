@@ -1,11 +1,12 @@
+mod common;
+
 use chrono::{DateTime, Days, NaiveDate, NaiveTime, TimeDelta, TimeZone, Utc, Weekday};
 use chrono_tz::America::Santiago;
 use chrono_tz::{Etc, Pacific};
 use clinic_app::hours::{
     HORIZON_DAYS, HoursOutcome, SetHoursError, SetHoursRequest, set_weekly_hours,
 };
-use clinic_app::in_memory::InMemorySchedules;
-use clinic_app::ports::ScheduleRepository;
+use clinic_app::in_memory::InMemoryStorage;
 use clinic_app::weekly_hours::{WeeklyHours, WeeklyShift};
 use clinic_domain::access::{Role, ScheduleAccess};
 use clinic_domain::appointment::AppointmentType;
@@ -13,6 +14,8 @@ use clinic_domain::ids::{ClinicId, PatientId, PractitionerId};
 use clinic_domain::schedule::{ReplaceHoursError, Schedule};
 use clinic_domain::time_slot::TimeSlot;
 use clinic_domain::working_hours::WorkingHours;
+
+use common::{save_committed, stored};
 
 fn clinic() -> ClinicId {
     ClinicId::new(1)
@@ -62,11 +65,9 @@ fn request(hours: WeeklyHours, from: NaiveDate) -> SetHoursRequest {
 }
 
 /// Ana's saved shifts at clinic 1.
-async fn saved_shifts(schedules: &InMemorySchedules) -> Vec<TimeSlot> {
-    schedules
-        .get(clinic(), ana())
+async fn saved_shifts(storage: &InMemoryStorage) -> Vec<TimeSlot> {
+    stored(storage, clinic(), ana())
         .await
-        .unwrap()
         .unwrap()
         .hours()
         .shifts()
@@ -74,28 +75,28 @@ async fn saved_shifts(schedules: &InMemorySchedules) -> Vec<TimeSlot> {
 }
 
 /// Books a 30-minute consultation for Ana at `start`, straight into the saved schedule.
-async fn book(schedules: &mut InMemorySchedules, start: DateTime<Utc>) {
-    let mut schedule = schedules.get(clinic(), ana()).await.unwrap().unwrap();
+async fn book(storage: &InMemoryStorage, start: DateTime<Utc>) {
+    let mut schedule = stored(storage, clinic(), ana()).await.unwrap();
     let consultation = AppointmentType::new("Consultation", TimeDelta::minutes(30)).unwrap();
     schedule
         .book(PatientId::new(7), start, consultation)
         .unwrap();
-    schedules.save(clinic(), ana(), schedule).await.unwrap();
+    save_committed(storage, clinic(), ana(), schedule).await;
 }
 
 /// Ana works Mondays 09:00-13:00 from 2026-03-30, with a consultation on 2026-04-06 at 09:00
 /// local time (13:00 UTC).
-async fn booked() -> InMemorySchedules {
-    let mut schedules = InMemorySchedules::new();
+async fn booked() -> InMemoryStorage {
+    let storage = InMemoryStorage::default();
     set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(9, 13), date(2026, 3, 30)),
     )
     .await
     .unwrap();
-    book(&mut schedules, utc(4, 6, 13, 0)).await;
-    schedules
+    book(&storage, utc(4, 6, 13, 0)).await;
+    storage
 }
 
 #[test]
@@ -105,10 +106,10 @@ fn the_horizon_is_four_weeks() {
 
 #[tokio::test]
 async fn creates_a_schedule_when_the_practitioner_has_none() {
-    let mut schedules = InMemorySchedules::new();
+    let storage = InMemoryStorage::default();
 
     let set = set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(9, 13), date(2026, 3, 30)),
     )
@@ -116,17 +117,17 @@ async fn creates_a_schedule_when_the_practitioner_has_none() {
     .unwrap();
 
     assert_eq!(set.outcome, HoursOutcome::Created);
-    let saved = schedules.get(clinic(), ana()).await.unwrap().unwrap();
+    let saved = stored(&storage, clinic(), ana()).await.unwrap();
     assert_eq!(saved.hours(), &set.shifts);
     assert!(saved.appointments().is_empty());
 }
 
 #[tokio::test]
 async fn expands_the_template_over_the_horizon_across_daylight_saving() {
-    let mut schedules = InMemorySchedules::new();
+    let storage = InMemoryStorage::default();
 
     let set = set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(9, 13), date(2026, 3, 30)),
     )
@@ -147,9 +148,9 @@ async fn expands_the_template_over_the_horizon_across_daylight_saving() {
 
 #[tokio::test]
 async fn replacing_keeps_the_shifts_before_from_and_answers_replaced() {
-    let mut schedules = InMemorySchedules::new();
+    let storage = InMemoryStorage::default();
     set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(9, 13), date(2026, 3, 30)),
     )
@@ -157,7 +158,7 @@ async fn replacing_keeps_the_shifts_before_from_and_answers_replaced() {
     .unwrap();
 
     let set = set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(14, 18), date(2026, 4, 13)),
     )
@@ -167,7 +168,7 @@ async fn replacing_keeps_the_shifts_before_from_and_answers_replaced() {
     assert_eq!(set.outcome, HoursOutcome::Replaced);
     assert_eq!(set.until, date(2026, 5, 11));
     assert_eq!(
-        saved_shifts(&schedules).await,
+        saved_shifts(&storage).await,
         [
             slot(utc(3, 30, 12, 0), utc(3, 30, 16, 0)),
             slot(utc(4, 6, 13, 0), utc(4, 6, 17, 0)),
@@ -181,10 +182,10 @@ async fn replacing_keeps_the_shifts_before_from_and_answers_replaced() {
 
 #[tokio::test]
 async fn the_answer_holds_only_the_new_shifts() {
-    let mut schedules = booked().await;
+    let storage = booked().await;
 
     let set = set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(14, 18), date(2026, 4, 27)),
     )
@@ -204,11 +205,11 @@ async fn the_answer_holds_only_the_new_shifts() {
 
 #[tokio::test]
 async fn the_same_request_twice_leaves_the_same_schedule() {
-    let mut schedules = booked().await;
-    let before = schedules.get(clinic(), ana()).await.unwrap().unwrap();
+    let storage = booked().await;
+    let before = stored(&storage, clinic(), ana()).await.unwrap();
 
     let set = set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(9, 13), date(2026, 3, 30)),
     )
@@ -216,36 +217,33 @@ async fn the_same_request_twice_leaves_the_same_schedule() {
     .unwrap();
 
     assert_eq!(set.outcome, HoursOutcome::Replaced);
-    assert_eq!(
-        schedules.get(clinic(), ana()).await.unwrap().unwrap(),
-        before
-    );
+    assert_eq!(stored(&storage, clinic(), ana()).await.unwrap(), before);
 }
 
 #[tokio::test]
 async fn booked_appointments_before_from_are_kept() {
-    let mut schedules = booked().await;
+    let storage = booked().await;
 
     set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(14, 18), date(2026, 4, 13)),
     )
     .await
     .unwrap();
 
-    let saved = schedules.get(clinic(), ana()).await.unwrap().unwrap();
+    let saved = stored(&storage, clinic(), ana()).await.unwrap();
     let slots: Vec<TimeSlot> = saved.appointments().iter().map(|a| a.slot()).collect();
     assert_eq!(slots, [slot(utc(4, 6, 13, 0), utc(4, 6, 13, 30))]);
 }
 
 #[tokio::test]
 async fn refuses_hours_that_leave_a_booked_appointment_outside_and_saves_nothing() {
-    let mut schedules = booked().await;
-    let before = schedules.get(clinic(), ana()).await.unwrap().unwrap();
+    let storage = booked().await;
+    let before = stored(&storage, clinic(), ana()).await.unwrap();
 
     let result = set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(14, 18), date(2026, 3, 30)),
     )
@@ -259,20 +257,17 @@ async fn refuses_hours_that_leave_a_booked_appointment_outside_and_saves_nothing
         ),
         "{result:?}"
     );
-    assert_eq!(
-        schedules.get(clinic(), ana()).await.unwrap().unwrap(),
-        before
-    );
+    assert_eq!(stored(&storage, clinic(), ana()).await.unwrap(), before);
 }
 
 #[tokio::test]
 async fn an_appointment_past_the_new_horizon_counts_as_outside() {
-    let mut schedules = booked().await;
-    book(&mut schedules, utc(4, 20, 13, 0)).await;
+    let storage = booked().await;
+    book(&storage, utc(4, 20, 13, 0)).await;
 
     // Starting a week earlier, the horizon ends before Monday 2026-04-20.
     let result = set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(9, 13), date(2026, 3, 23)),
     )
@@ -291,15 +286,12 @@ async fn an_appointment_past_the_new_horizon_counts_as_outside() {
 #[tokio::test]
 async fn when_midnight_is_skipped_the_old_hours_end_when_the_clocks_jump() {
     // Santiago's clocks jump from 00:00 to 01:00 on Sunday 2026-09-06, at 04:00 UTC.
-    let mut schedules = InMemorySchedules::new();
+    let storage = InMemoryStorage::default();
     let old = WorkingHours::new(vec![slot(utc(9, 6, 2, 0), utc(9, 6, 6, 0))]).unwrap();
-    schedules
-        .save(clinic(), ana(), Schedule::new(old))
-        .await
-        .unwrap();
+    save_committed(&storage, clinic(), ana(), Schedule::new(old)).await;
 
     set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         request(mondays(9, 13), date(2026, 9, 6)),
     )
@@ -307,7 +299,7 @@ async fn when_midnight_is_skipped_the_old_hours_end_when_the_clocks_jump() {
     .unwrap();
 
     assert_eq!(
-        saved_shifts(&schedules).await[0],
+        saved_shifts(&storage).await[0],
         slot(utc(9, 6, 2, 0), utc(9, 6, 4, 0))
     );
 }
@@ -315,16 +307,15 @@ async fn when_midnight_is_skipped_the_old_hours_end_when_the_clocks_jump() {
 #[tokio::test]
 async fn a_from_at_the_edge_of_the_calendar_is_refused_without_saving() {
     for from in [NaiveDate::MAX, NaiveDate::MIN] {
-        let mut schedules = InMemorySchedules::new();
+        let storage = InMemoryStorage::default();
 
-        let result =
-            set_weekly_hours(&mut schedules, &access(), request(mondays(9, 13), from)).await;
+        let result = set_weekly_hours(&storage, &access(), request(mondays(9, 13), from)).await;
 
         assert!(
             matches!(result, Err(SetHoursError::OutOfRange)),
             "from {from}: {result:?}"
         );
-        assert_eq!(schedules.get(clinic(), ana()).await.unwrap(), None);
+        assert_eq!(stored(&storage, clinic(), ana()).await, None);
     }
 }
 
@@ -358,14 +349,10 @@ async fn the_dates_nearest_the_edge_of_the_calendar_are_accepted() {
 
     for time_zone in zones {
         for from in [earliest, latest] {
-            let mut schedules = InMemorySchedules::new();
+            let storage = InMemoryStorage::default();
 
-            let result = set_weekly_hours(
-                &mut schedules,
-                &access(),
-                request(every_day(time_zone), from),
-            )
-            .await;
+            let result =
+                set_weekly_hours(&storage, &access(), request(every_day(time_zone), from)).await;
 
             assert!(result.is_ok(), "{time_zone} from {from}: {result:?}");
         }
@@ -374,11 +361,11 @@ async fn the_dates_nearest_the_edge_of_the_calendar_are_accepted() {
 
 #[tokio::test]
 async fn each_clinic_sets_its_own_practitioners_hours() {
-    let mut schedules = booked().await;
-    let before = schedules.get(clinic(), ana()).await.unwrap().unwrap();
+    let storage = booked().await;
+    let before = stored(&storage, clinic(), ana()).await.unwrap();
 
     let set = set_weekly_hours(
-        &mut schedules,
+        &storage,
         &access(),
         SetHoursRequest {
             clinic: ClinicId::new(2),
@@ -389,10 +376,7 @@ async fn each_clinic_sets_its_own_practitioners_hours() {
     .unwrap();
 
     assert_eq!(set.outcome, HoursOutcome::Created);
-    assert_eq!(
-        schedules.get(clinic(), ana()).await.unwrap().unwrap(),
-        before
-    );
+    assert_eq!(stored(&storage, clinic(), ana()).await.unwrap(), before);
 }
 
 #[test]

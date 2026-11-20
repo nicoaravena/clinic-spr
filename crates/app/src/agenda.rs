@@ -1,8 +1,10 @@
 //! A practitioner's agenda: the first query.
 //!
-//! [`practitioner_agenda`] gets the practitioner's schedule through the port and asks the domain's
+//! [`practitioner_agenda`] begins a session at the clinic, gets the practitioner's schedule through
+//! it, and asks the domain's
 //! [`Schedule::appointments_in`](clinic_domain::schedule::Schedule::appointments_in) which
-//! appointments fall in the range. It changes nothing.
+//! appointments fall in the range. It changes nothing, so it drops the session instead of
+//! committing it.
 
 use clinic_domain::access::ScheduleAccess;
 use clinic_domain::appointment::Appointment;
@@ -10,7 +12,7 @@ use clinic_domain::ids::{ClinicId, PractitionerId};
 use clinic_domain::time_slot::TimeSlot;
 use thiserror::Error;
 
-use crate::ports::{ScheduleRepository, StorageError};
+use crate::ports::{ScheduleRepository, Storage, StorageError};
 
 /// Whose agenda to read, at which clinic, and for what span of time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,16 +29,20 @@ pub struct AgendaQuery {
 ///
 /// Fails if the practitioner has no schedule at the clinic, or if storage fails. An empty agenda
 /// is not an error. `access` proves the caller may see schedules.
-pub async fn practitioner_agenda<S>(
-    schedules: &S,
+pub async fn practitioner_agenda<St>(
+    storage: &St,
     _access: &ScheduleAccess,
     query: AgendaQuery,
 ) -> Result<Vec<Appointment>, AgendaError>
 where
-    S: ScheduleRepository,
+    St: Storage + Sync,
 {
-    let schedule = schedules
-        .get(query.clinic, query.practitioner)
+    // Nothing is written, so there's nothing to commit: the session is dropped at the end of the
+    // statement, which ends it.
+    let schedule = storage
+        .begin(query.clinic)
+        .await?
+        .get(query.practitioner)
         .await?
         .ok_or(AgendaError::UnknownPractitioner)?;
 
@@ -53,7 +59,7 @@ pub enum AgendaError {
     /// The practitioner has no schedule at this clinic.
     #[error("clinic has no schedule for that practitioner")]
     UnknownPractitioner,
-    /// The schedule couldn't be read.
+    /// A session couldn't begin, or the schedule couldn't be read.
     #[error(transparent)]
     Storage(#[from] StorageError),
 }

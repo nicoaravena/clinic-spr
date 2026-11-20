@@ -4,10 +4,9 @@ use axum::Router;
 use axum::http::StatusCode;
 use clinic_api::router;
 use clinic_api::state::AppState;
-use clinic_app::ports::{AppointmentTypes, ScheduleRepository, StorageError};
-use clinic_domain::appointment::AppointmentType;
-use clinic_domain::ids::{ClinicId, PractitionerId};
-use clinic_domain::schedule::Schedule;
+use clinic_app::in_memory::InMemorySession;
+use clinic_app::ports::{Storage, StorageError};
+use clinic_domain::ids::ClinicId;
 use serde_json::{Value, json};
 
 use common::{booking, get, post, put};
@@ -15,40 +14,19 @@ use common::{booking, get, post, put};
 /// The cause every call fails with. It must never reach a client.
 const CAUSE: &str = "connection refused by db.internal:5432";
 
-/// Storage that can't be reached: every call fails.
+/// Storage that can't be reached: no session can begin.
 struct Unreachable;
 
-impl ScheduleRepository for Unreachable {
-    async fn get(
-        &self,
-        _clinic: ClinicId,
-        _practitioner: PractitionerId,
-    ) -> Result<Option<Schedule>, StorageError> {
-        Err(StorageError::new(CAUSE))
-    }
+impl Storage for Unreachable {
+    type Session = InMemorySession;
 
-    async fn save(
-        &mut self,
-        _clinic: ClinicId,
-        _practitioner: PractitionerId,
-        _schedule: Schedule,
-    ) -> Result<(), StorageError> {
-        Err(StorageError::new(CAUSE))
-    }
-}
-
-impl AppointmentTypes for Unreachable {
-    async fn find(
-        &self,
-        _clinic: ClinicId,
-        _name: &str,
-    ) -> Result<Option<AppointmentType>, StorageError> {
+    async fn begin(&self, _clinic: ClinicId) -> Result<InMemorySession, StorageError> {
         Err(StorageError::new(CAUSE))
     }
 }
 
 fn unreachable_app() -> Router {
-    router(AppState::new(Unreachable, Unreachable))
+    router(AppState::new(Unreachable))
 }
 
 /// A 500 with the same body for every storage failure, and nothing about the cause.

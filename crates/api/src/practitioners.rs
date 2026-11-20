@@ -15,7 +15,7 @@ use chrono::{DateTime, NaiveDate, NaiveTime, Utc, Weekday};
 use chrono_tz::Tz;
 use clinic_app::agenda::{AgendaQuery, practitioner_agenda};
 use clinic_app::hours::{HoursOutcome, SetHoursRequest, set_weekly_hours};
-use clinic_app::ports::{AppointmentTypes, ScheduleRepository};
+use clinic_app::ports::Storage;
 use clinic_app::weekly_hours::{WeeklyHours, WeeklyShift};
 use clinic_domain::access::ScheduleAccess;
 use clinic_domain::ids::PractitionerId;
@@ -60,15 +60,14 @@ pub struct AgendaBody {
 ///
 /// Like the body in [`book`](crate::appointments::book), the path and the query are taken as
 /// `Result`s so that a bad one becomes an [`ApiError`] with the usual JSON shape.
-pub async fn agenda<S, T>(
-    State(state): State<AppState<S, T>>,
+pub async fn agenda<St>(
+    State(state): State<AppState<St>>,
     ClinicHeader(clinic): ClinicHeader,
     id: Result<Path<u64>, PathRejection>,
     params: Result<Query<AgendaParams>, QueryRejection>,
 ) -> Result<Json<AgendaBody>, ApiError>
 where
-    S: ScheduleRepository + Send + Sync + 'static,
-    T: AppointmentTypes + Send + Sync + 'static,
+    St: Storage + Send + Sync + 'static,
 {
     let Path(id) = id?;
     let Query(params) = params?;
@@ -80,9 +79,7 @@ where
         range: TimeSlot::new(params.from, params.to)?,
     };
 
-    // Reading needs the lock too: a booking may be saving the same schedule on another thread.
-    // The guard is a temporary, dropped at the end of the statement, after the `.await`.
-    let appointments = practitioner_agenda(&state.lock().await.schedules, &access, query).await?;
+    let appointments = practitioner_agenda(state.storage(), &access, query).await?;
 
     Ok(Json(AgendaBody {
         practitioner_id: practitioner.value(),
@@ -160,15 +157,14 @@ pub struct ShiftBody {
 /// Answers `201 Created` if the practitioner had no schedule at the clinic, and `200 OK` if their
 /// hours were replaced. Sending the same body again changes nothing and gives the same answer, as
 /// `PUT` should.
-pub async fn set_hours<S, T>(
-    State(state): State<AppState<S, T>>,
+pub async fn set_hours<St>(
+    State(state): State<AppState<St>>,
     ClinicHeader(clinic): ClinicHeader,
     id: Result<Path<u64>, PathRejection>,
     body: Result<Json<SetHoursBody>, JsonRejection>,
 ) -> Result<(StatusCode, Json<HoursBody>), ApiError>
 where
-    S: ScheduleRepository + Send + Sync + 'static,
-    T: AppointmentTypes + Send + Sync + 'static,
+    St: Storage + Send + Sync + 'static,
 {
     let Path(id) = id?;
     let Json(body) = body?;
@@ -192,8 +188,7 @@ where
         from: body.from,
     };
 
-    // As in `book`, the lock is held from reading the schedule to saving it.
-    let set = set_weekly_hours(&mut state.lock().await.schedules, &access, request).await?;
+    let set = set_weekly_hours(state.storage(), &access, request).await?;
 
     let status = match set.outcome {
         HoursOutcome::Created => StatusCode::CREATED,

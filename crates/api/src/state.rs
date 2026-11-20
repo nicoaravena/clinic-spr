@@ -1,76 +1,60 @@
 //! What every request handler shares: the storage behind the use cases.
 //!
-//! Handlers run concurrently, possibly on several threads, so the shared storage sits behind an
-//! [`Arc`] (one copy, many owners) and a [`Mutex`] (one request at a time may touch it).
-//!
-//! The mutex is tokio's, not the standard library's, because a handler keeps it locked while it
-//! `.await`s the ports. A [`std::sync::MutexGuard`] isn't `Send`, so a handler holding one across an
-//! `.await` couldn't move between threads and axum would refuse it. Waiting for tokio's lock also
-//! lets the thread serve other requests meanwhile, instead of blocking it.
+//! Handlers run concurrently, possibly on several threads, so the storage sits behind an [`Arc`]
+//! (one copy, many owners). There's no lock here: each use case begins its own session, and the
+//! storage decides how sessions are kept apart. The in-memory one runs them one at a time; a
+//! database runs them as transactions.
 
 use std::fmt;
 use std::sync::Arc;
 
-use clinic_app::ports::{AppointmentTypes, ScheduleRepository};
-use tokio::sync::{Mutex, MutexGuard};
+use clinic_app::ports::Storage;
 
-/// The router's state: the adapters for the ports the use cases need, shared by every request.
+/// The router's state: the storage the use cases begin their sessions in, shared by every request.
 ///
-/// `S` and `T` are the adapter types, such as the in-memory ones from `clinic_app`. They're type
-/// parameters rather than trait objects because the ports' `async` methods make them unusable as
-/// trait objects.
+/// `St` is the storage type, such as `clinic_app`'s in-memory one. It's a type parameter rather
+/// than a trait object because [`Storage`] has an associated type and `async` methods, which make
+/// it unusable as a trait object.
 ///
 /// Cloning it is cheap and every clone sees the same storage, which is what axum does for each
 /// request.
-pub struct AppState<S, T> {
-    store: Arc<Mutex<Store<S, T>>>,
+pub struct AppState<St> {
+    storage: Arc<St>,
 }
 
-impl<S, T> AppState<S, T>
+impl<St> AppState<St>
 where
-    S: ScheduleRepository + Send + Sync + 'static,
-    T: AppointmentTypes + Send + Sync + 'static,
+    St: Storage + Send + Sync + 'static,
 {
-    /// State backed by the given adapters.
+    /// State backed by `storage`.
     ///
-    /// The adapters must be `Send` and `Sync` so the storage can be used from the threads that
-    /// serve requests, and `'static` so it doesn't borrow anything that could go away first.
-    pub fn new(schedules: S, types: T) -> Self {
+    /// The storage must be `Send` and `Sync` so it can be used from the threads that serve
+    /// requests, and `'static` so it doesn't borrow anything that could go away first.
+    pub fn new(storage: St) -> Self {
         Self {
-            store: Arc::new(Mutex::new(Store { schedules, types })),
+            storage: Arc::new(storage),
         }
     }
 
-    /// Exclusive access to the storage until the guard is dropped. Waits while another request
-    /// holds it.
-    ///
-    /// Unlike the standard library's, tokio's mutex isn't poisoned when a request panics while
-    /// holding it, so this can't fail. A panic could leave the storage half-changed; the in-memory
-    /// adapters change it in one step, and the database adapters will use transactions instead.
-    pub(crate) async fn lock(&self) -> MutexGuard<'_, Store<S, T>> {
-        self.store.lock().await
+    /// The storage, for a use case to begin a session in.
+    pub(crate) fn storage(&self) -> &St {
+        &self.storage
     }
 }
 
-// Written out instead of derived: `#[derive(Clone)]` would require `S: Clone` and `T: Clone`,
-// though only the `Arc` is cloned.
-impl<S, T> Clone for AppState<S, T> {
+// Written out instead of derived: `#[derive(Clone)]` would require `St: Clone`, though only the
+// `Arc` is cloned.
+impl<St> Clone for AppState<St> {
     fn clone(&self) -> Self {
         Self {
-            store: Arc::clone(&self.store),
+            storage: Arc::clone(&self.storage),
         }
     }
 }
 
-impl<S, T> fmt::Debug for AppState<S, T> {
+impl<St> fmt::Debug for AppState<St> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // The adapters don't have to implement `Debug`, so they aren't shown.
+        // The storage doesn't have to implement `Debug`, so it isn't shown.
         f.debug_struct("AppState").finish_non_exhaustive()
     }
-}
-
-/// The adapters, behind the lock.
-pub(crate) struct Store<S, T> {
-    pub(crate) schedules: S,
-    pub(crate) types: T,
 }
