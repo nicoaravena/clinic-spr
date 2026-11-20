@@ -391,3 +391,19 @@ fn error_implements_the_standard_error_trait() {
 
     assert_is_error(WeeklyHoursError::EndNotAfterStart);
 }
+
+#[test]
+fn a_day_starts_at_local_midnight() {
+    let hours = weekday_mornings(Madrid);
+
+    // Madrid is at +01:00 in winter.
+    assert_eq!(hours.day_start(date(2026, 3, 2)), utc(2026, 3, 1, 23, 0));
+}
+
+#[test]
+fn a_day_whose_midnight_is_skipped_starts_when_the_clocks_jump() {
+    // Santiago's clocks jump from 00:00 to 01:00 on Sunday 2026-09-06, at 04:00 UTC.
+    let hours = weekday_mornings(Santiago);
+
+    assert_eq!(hours.day_start(date(2026, 9, 6)), utc(2026, 9, 6, 4, 0));
+}

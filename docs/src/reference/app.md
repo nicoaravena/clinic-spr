@@ -5,7 +5,8 @@ Use cases, the ports they need, and in-memory adapters for those ports.
 - **Source:** `crates/app/src/`
 - **Introduced in:** [step 2.1](../steps/2.1-app-and-ports.md); the
   agenda query in [step 2.2](../steps/2.2-practitioner-agenda.md); weekly
-  hours in [step 2.3](../steps/2.3-weekly-hours.md)
+  hours in [step 2.3](../steps/2.3-weekly-hours.md); setting them in
+  [step 2.6](../steps/2.6-weekly-hours-endpoint.md)
 - **API docs:** [`clinic_app`][api]
 
 ## Modules and public items
@@ -16,7 +17,8 @@ Use cases, the ports they need, and in-memory adapters for those ports.
 | `in_memory` | `InMemorySchedules` (`new`), `InMemoryAppointmentTypes` (`new`, `add`), `DuplicateAppointmentType` (`name`) |
 | `booking` | `book_appointment`, `BookingRequest`, `BookAppointmentError` (`UnknownPractitioner`, `UnknownAppointmentType`, `Booking(BookingError)`) |
 | `agenda` | `practitioner_agenda`, `AgendaQuery`, `AgendaError` (`UnknownPractitioner`) |
-| `weekly_hours` | `WeeklyShift` (`new`, `weekday`, `start`, `end`), `WeeklyHours` (`new`, `time_zone`, `shifts`, `working_hours`), `WeeklyHoursError` (`EndNotAfterStart`, `ShiftsNotSeparated { weekday }`) |
+| `weekly_hours` | `WeeklyShift` (`new`, `weekday`, `start`, `end`), `WeeklyHours` (`new`, `time_zone`, `shifts`, `day_start`, `working_hours`), `WeeklyHoursError` (`EndNotAfterStart`, `ShiftsNotSeparated { weekday }`) |
+| `hours` | `set_weekly_hours`, `HORIZON_DAYS`, `SetHoursRequest`, `HoursSet`, `HoursOutcome` (`Created`, `Replaced`), `SetHoursError` (`OutOfRange`, `Hours(ReplaceHoursError)`) |
 
 ## Rules and how they are enforced
 
@@ -35,6 +37,11 @@ Use cases, the ports they need, and in-memory adapters for those ports.
 | Weekly shifts on the same weekday don't overlap or touch | `WeeklyHours::new` returns `ShiftsNotSeparated`; private fields, `compile_fail` doctest |
 | Time zones stay out of the domain | `WeeklyHours::working_hours` converts to UTC before building `WorkingHours` |
 | Expanding weekly hours can't fail | Skipped and repeated local times map forward only; tested over a year in three zones |
+| Only a role allowed to manage schedules can set hours | `set_weekly_hours` takes a `&ScheduleAccess` |
+| Setting hours keeps the past | Shifts before the start of `from` are kept, via `WorkingHours::replace_from` |
+| Setting hours never strands a booked appointment | `Schedule::replace_hours` refuses, and nothing is saved |
+| Setting the same hours twice changes nothing | The result depends only on the request and the stored schedule; tested |
+| A date near chrono's limits can't panic the server | `set_weekly_hours` returns `OutOfRange` unless two days either side of the horizon exist; tested at both ends in extreme zones |
 
 ## Semantics
 
@@ -60,6 +67,29 @@ alike.
 Otherwise it returns copies of the appointments that overlap `query.range`,
 sorted by start, which may be none. It is generic over the port with a
 `?Sized` bound, like `book_appointment`.
+
+### Setting weekly hours
+
+`set_weekly_hours(schedules, access, request)`:
+
+1. Fails with `OutOfRange` unless the dates from two days before `from` to
+   two days after `from` + `HORIZON_DAYS` (28) all exist in chrono's
+   calendar.
+2. Expands `request.hours` on the local dates `[from, until)`, where `until`
+   is `from` + 28 days.
+3. If the practitioner has no schedule at the clinic, saves a new one with
+   those shifts (`Created`).
+4. Otherwise replaces the schedule's hours from `hours.day_start(from)` on,
+   keeping earlier shifts (`WorkingHours::replace_from`), and fails with
+   `Hours(AppointmentOutsideHours)` if a booked appointment wouldn't fit
+   (`Replaced` on success).
+
+It returns the outcome, `until`, and the newly expanded shifts only (not
+the kept ones). On failure nothing is saved.
+
+`day_start(date)` is the instant `date` begins in the template's time zone:
+its local midnight, or the instant the clocks jump to if midnight is
+skipped (Santiago, 2026-09-06: 04:00 UTC).
 
 ### Weekly hours
 
@@ -97,7 +127,8 @@ Examples (Europe/Madrid):
   `practitioner_agenda` filters it in memory. A database adapter will need
   a port method that loads only a date range.
 - Appointments have no ID, so nothing can refer to one booking yet.
-- No use case expands weekly hours or stores them. Shifts can't cross
-  midnight.
+- The weekly template isn't stored, only its expansion. Nothing extends
+  the hours when the horizon runs out; the client sends them again.
+- Shifts can't cross midnight.
 
 [api]: ../../../target/doc/clinic_app/index.html

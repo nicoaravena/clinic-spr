@@ -56,8 +56,8 @@ and loses every booking when it stops:
 | 2 | Consultation (30 min) | none |
 
 Clinic 2 is there to show that one clinic can't reach another's data.
-Step 2.6 adds an endpoint for working hours, and M3 replaces the in-memory
-storage with Postgres.
+Other practitioners get hours through `PUT /practitioners/{id}/hours`
+(step 2.6). M3 replaces the in-memory storage with Postgres.
 
 ## Tests
 

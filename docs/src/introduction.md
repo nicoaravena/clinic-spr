@@ -31,8 +31,9 @@ cargo run -p clinic
 It starts the HTTP server on `127.0.0.1:3000` with two demo clinics in
 memory (see [clinic](reference/clinic.md)). Ctrl-C stops it. The
 [walkthrough in step 2.5](steps/2.5-serving-http.md#see-it-run) lists curl
-commands to try against it: bookings that succeed and are refused, and
-practitioners' agendas. Every step extends that walkthrough. Its full
+commands to try against it: bookings that succeed and are refused,
+practitioners' agendas, and, from step 2.6, setting a practitioner's weekly
+hours. Every step extends that walkthrough. Its full
 transcript is in `crates/clinic/tests/expected-output.txt`, and a test
 replays it against the real binary on every `cargo test`.
 

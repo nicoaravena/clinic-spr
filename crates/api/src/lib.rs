@@ -12,12 +12,13 @@
 //! |---|---|
 //! | `POST /appointments` | [`appointments::book`] |
 //! | `GET /practitioners/{id}/agenda` | [`practitioners::agenda`] |
+//! | `PUT /practitioners/{id}/hours` | [`practitioners::set_hours`] |
 //!
 //! Every route needs an `X-Clinic-Id` header naming the clinic, until login arrives in M4. See
 //! [`clinic_header`].
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use clinic_domain::access::Role;
 
 pub mod appointments;
@@ -39,5 +40,6 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/appointments", post(appointments::book))
         .route("/practitioners/{id}/agenda", get(practitioners::agenda))
+        .route("/practitioners/{id}/hours", put(practitioners::set_hours))
         .with_state(state)
 }

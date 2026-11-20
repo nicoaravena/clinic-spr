@@ -1,7 +1,7 @@
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use clinic_domain::appointment::{AppointmentStatus, AppointmentType};
 use clinic_domain::ids::PatientId;
-use clinic_domain::schedule::{BookingError, Schedule};
+use clinic_domain::schedule::{BookingError, ReplaceHoursError, Schedule};
 use clinic_domain::time_slot::TimeSlot;
 use clinic_domain::working_hours::WorkingHours;
 
@@ -322,4 +322,101 @@ fn asking_for_a_range_leaves_the_schedule_as_it_was() {
 
     assert_eq!(first, second);
     assert_eq!(schedule.appointments().len(), 3);
+}
+
+/// The lunch-break day with consultations booked at 09:00 and 15:00.
+fn booked_day() -> Schedule {
+    let mut schedule = day_with_lunch_break();
+    for start in [at(15, 0), at(9, 0)] {
+        schedule.book(patient(), start, consultation()).unwrap();
+    }
+    schedule
+}
+
+#[test]
+fn exposes_its_working_hours() {
+    let schedule = day_with_lunch_break();
+
+    assert_eq!(
+        schedule.hours().shifts(),
+        [slot(at(9, 0), at(13, 0)), slot(at(14, 0), at(18, 0))]
+    );
+}
+
+#[test]
+fn replacing_hours_that_still_hold_every_appointment_keeps_them() {
+    let mut schedule = booked_day();
+    let wider = WorkingHours::new(vec![slot(at(8, 0), at(18, 0))]).unwrap();
+
+    assert_eq!(schedule.replace_hours(wider.clone()), Ok(()));
+
+    assert_eq!(schedule.hours(), &wider);
+    let slots: Vec<TimeSlot> = schedule.appointments().iter().map(|a| a.slot()).collect();
+    assert_eq!(
+        slots,
+        [slot(at(9, 0), at(9, 30)), slot(at(15, 0), at(15, 30))]
+    );
+}
+
+#[test]
+fn replaced_hours_are_the_ones_new_bookings_must_fit() {
+    let mut schedule = day_with_lunch_break();
+    let afternoon = WorkingHours::new(vec![slot(at(14, 0), at(18, 0))]).unwrap();
+    schedule.replace_hours(afternoon).unwrap();
+
+    assert_eq!(
+        schedule
+            .book(patient(), at(9, 0), consultation())
+            .map(|a| a.slot()),
+        Err(BookingError::OutsideWorkingHours)
+    );
+}
+
+#[test]
+fn refuses_hours_that_leave_an_appointment_outside_and_names_the_earliest() {
+    let mut schedule = booked_day();
+    let evening = WorkingHours::new(vec![slot(at(17, 0), at(20, 0))]).unwrap();
+
+    assert_eq!(
+        schedule.replace_hours(evening),
+        Err(ReplaceHoursError::AppointmentOutsideHours {
+            existing: slot(at(9, 0), at(9, 30)),
+        })
+    );
+}
+
+#[test]
+fn refuses_hours_that_hold_an_appointment_only_across_two_shifts() {
+    let mut schedule = booked_day();
+    let split =
+        WorkingHours::new(vec![slot(at(8, 0), at(9, 15)), slot(at(9, 20), at(18, 0))]).unwrap();
+
+    assert_eq!(
+        schedule.replace_hours(split),
+        Err(ReplaceHoursError::AppointmentOutsideHours {
+            existing: slot(at(9, 0), at(9, 30)),
+        })
+    );
+}
+
+#[test]
+fn a_refused_replacement_leaves_the_schedule_unchanged() {
+    let mut schedule = booked_day();
+    let before = schedule.clone();
+
+    let empty = WorkingHours::new(Vec::new()).unwrap();
+    assert!(schedule.replace_hours(empty).is_err());
+
+    assert_eq!(schedule, before);
+}
+
+#[test]
+fn replace_hours_error_has_a_readable_message() {
+    assert_eq!(
+        ReplaceHoursError::AppointmentOutsideHours {
+            existing: slot(at(9, 0), at(9, 30)),
+        }
+        .to_string(),
+        "an existing appointment would be outside the new working hours",
+    );
 }

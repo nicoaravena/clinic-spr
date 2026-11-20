@@ -114,6 +114,12 @@ impl WeeklyHours {
         &self.shifts
     }
 
+    /// The instant `date` starts in the time zone: its local midnight, read by the rules in the
+    /// module documentation. If the clocks skip midnight, the day starts when they jump.
+    pub fn day_start(&self, date: NaiveDate) -> DateTime<Utc> {
+        to_utc(self.time_zone, date.and_time(NaiveTime::MIN))
+    }
+
     /// The shifts worked on the local dates from `from` up to, but not including, `until`, as UTC
     /// working hours. A range that is empty or reversed gives no shifts.
     ///

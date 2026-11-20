@@ -8,8 +8,9 @@ One practitioner's working hours and the appointments booked in them.
 
 ## Public items
 
-- `Schedule`: `new`, `appointments`, `appointments_in`, `book`
+- `Schedule`: `new`, `hours`, `replace_hours`, `appointments`, `appointments_in`, `book`
 - `BookingError`: `OutOfRange`, `OutsideWorkingHours`, `Overlaps { existing }`
+- `ReplaceHoursError`: `AppointmentOutsideHours { existing }`
 
 ## Rules and how they are enforced
 
@@ -18,6 +19,7 @@ One practitioner's working hours and the appointments booked in them.
 | An appointment fits inside a single shift | `book` returns `OutsideWorkingHours` otherwise |
 | Appointments don't overlap | `book` returns `Overlaps` otherwise |
 | Appointments are stored sorted by start | `book` inserts at the sorted position |
+| Changing the hours never strands an appointment | `replace_hours` returns `AppointmentOutsideHours` otherwise, and changes nothing |
 | Appointments are added only through `book` | Private fields, `compile_fail` doctest; `Appointment` has a `pub(crate)` constructor |
 
 ## Semantics
@@ -42,6 +44,14 @@ appointment ending exactly at `range.start()` or starting exactly at
 `range.end()` is left out, and one straddling either edge is included. It
 relies on appointments being sorted and non-overlapping to stop at the end
 of the range.
+
+`replace_hours(hours)` swaps in new working hours and keeps every
+appointment (added in
+[step 2.6](../steps/2.6-weekly-hours-endpoint.md)). It fails with
+`AppointmentOutsideHours`, naming the earliest appointment that wouldn't fit
+inside a single shift of `hours`, and then the schedule is unchanged. An
+appointment that fits only across two touching-but-separate shifts doesn't
+count as fitting, as for `book`.
 
 ## Not yet
 

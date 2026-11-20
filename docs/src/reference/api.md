@@ -4,7 +4,8 @@ The HTTP JSON API, as a library: an axum `Router` and its handlers.
 
 - **Source:** `crates/api/src/`
 - **Introduced in:** [step 2.4](../steps/2.4-http-api.md); the agenda
-  route in [step 2.5](../steps/2.5-serving-http.md)
+  route in [step 2.5](../steps/2.5-serving-http.md); the hours route in
+  [step 2.6](../steps/2.6-weekly-hours-endpoint.md)
 - **Served by:** the [`clinic` binary](clinic.md)
 - **API docs:** [`clinic_api`][api]
 
@@ -16,8 +17,8 @@ The HTTP JSON API, as a library: an axum `Router` and its handlers.
 | `state` | `AppState` (`new`) |
 | `clinic_header` | `ClinicHeader`, `CLINIC_HEADER` |
 | `appointments` | `book` (handler), `BookAppointmentBody`, `AppointmentBody` (`new`) |
-| `practitioners` | `agenda` (handler), `AgendaParams`, `AgendaBody` |
-| `error` | `ApiError` (`status`, `code`; `MissingClinic`, `InvalidClinic`, `InvalidBody`, `InvalidPath`, `InvalidQuery`, `InvalidRange`, `AccessDenied`, `Booking`, `Agenda`, `Internal`) |
+| `practitioners` | `agenda` (handler), `AgendaParams`, `AgendaBody`; `set_hours` (handler), `SetHoursBody`, `WeeklyShiftBody`, `HoursBody`, `ShiftBody` |
+| `error` | `ApiError` (`status`, `code`; `MissingClinic`, `InvalidClinic`, `InvalidBody`, `InvalidPath`, `InvalidQuery`, `InvalidRange`, `InvalidTimeZone`, `WeeklyHours`, `AccessDenied`, `Booking`, `Agenda`, `Hours`, `Internal`) |
 
 ## Routes
 
@@ -97,6 +98,55 @@ range is an empty list, not an error. `from` and `to` are echoed in UTC.
 }
 ```
 
+### `PUT /practitioners/{id}/hours`
+
+Sets a practitioner's weekly hours through `set_weekly_hours`.
+
+- `{id}`: the practitioner, a whole number that fits in a `u64`.
+- Headers: `X-Clinic-Id: <u64>` and `Content-Type: application/json`.
+
+Body (unknown fields are refused, in the body and in each shift):
+
+```json
+{
+  "time_zone": "America/Santiago",
+  "from": "2026-03-30",
+  "shifts": [{ "weekday": "Mon", "start": "09:00", "end": "13:00" }]
+}
+```
+
+- `time_zone`: an IANA name, matched exactly (`america/santiago` is
+  refused).
+- `from`: the first local date the hours apply to, `YYYY-MM-DD`.
+- `shifts`: may be empty. `weekday` is an English name, short or full, in
+  any case. `start` and `end` are local times, `HH:MM` or `HH:MM:SS`, on
+  the same day; `end` must be after `start`. Shifts on the same weekday
+  must not overlap or touch.
+
+The template is expanded over the 28 local dates from `from` and replaces
+the practitioner's hours from the start of `from` on. Earlier shifts and
+appointments are kept.
+
+Answer: `201 Created` if the practitioner had no schedule at the clinic,
+`200 OK` if their hours were replaced. Sending the same body again gives
+the same answer with `200` and changes nothing. `shifts` holds only the
+new UTC shifts, for the dates `[from, until)`.
+
+```json
+{
+  "practitioner_id": 2,
+  "time_zone": "America/Santiago",
+  "from": "2026-03-30",
+  "until": "2026-04-27",
+  "shifts": [
+    { "start": "2026-03-30T12:00:00Z", "end": "2026-03-30T16:00:00Z" },
+    { "start": "2026-04-06T13:00:00Z", "end": "2026-04-06T17:00:00Z" },
+    { "start": "2026-04-13T13:00:00Z", "end": "2026-04-13T17:00:00Z" },
+    { "start": "2026-04-20T13:00:00Z", "end": "2026-04-20T17:00:00Z" }
+  ]
+}
+```
+
 ## Errors
 
 Every error has the same body. `error` is stable and meant for programs;
@@ -116,6 +166,11 @@ Every error has the same body. `error` is stable and meant for programs;
 | A path parameter doesn't parse, such as `/practitioners/abc/agenda` | 400 | `invalid_path` |
 | A query parameter is missing, mistyped or unknown | 400 | `invalid_query` |
 | `to` isn't after `from` | 422 | `invalid_range` |
+| `time_zone` isn't an IANA name | 422 | `invalid_time_zone` |
+| A weekly shift doesn't end after it starts | 422 | `shift_end_not_after_start` |
+| Two weekly shifts on one weekday overlap or touch | 422 | `shifts_not_separated` |
+| The hours' `from` is too close to chrono's earliest or latest date | 422 | `out_of_range` |
+| New hours would leave a booked appointment outside them | 409 | `appointment_outside_hours` |
 | The caller's role may not do this (not reachable before M4) | 403 | `access_denied` |
 | No schedule for that practitioner at this clinic, named in a body | 422 | `unknown_practitioner` |
 | No schedule for that practitioner at this clinic, named in the path | 404 | `unknown_practitioner` |
@@ -131,10 +186,11 @@ Every error has the same body. `error` is stable and meant for programs;
 |---|---|
 | Every request names its clinic | Every handler takes a `ClinicHeader`, which refuses the request before the handler runs |
 | One clinic can't book into or read another's schedules | The clinic from the header is passed to the ports; tested over HTTP for both routes |
-| Rules stay in the domain and `app` | `book` calls `book_appointment` and `agenda` calls `practitioner_agenda`, and each maps the errors; neither checks anything itself |
+| Rules stay in the domain and `app` | `book` calls `book_appointment`, `agenda` calls `practitioner_agenda` and `set_hours` calls `set_weekly_hours`, and each maps the errors; none checks a rule itself |
+| Text is parsed into types at the edge | `set_hours` parses the time zone name into a `Tz`, and serde reads dates, times and weekdays, before any use case runs |
 | A read never sees a half-saved schedule | `agenda` takes the same lock as `book` |
 | Two requests can't book the same slot | The store's lock is held across `book_appointment`'s read, book and save; tested with 20 concurrent requests |
-| Every refusal has a deliberate status | `ApiError::status` matches every `BookingError` and `AgendaError` without a wildcard, so a new one doesn't compile until it's mapped |
+| Every refusal has a deliberate status | `ApiError::status` matches every `BookingError`, `AgendaError`, `WeeklyHoursError` and `SetHoursError` without a wildcard, so a new one doesn't compile until it's mapped |
 | The domain doesn't depend on serde | JSON shapes are separate DTOs in `appointments` and `practitioners` |
 
 [api]: ../../../target/doc/clinic_api/index.html

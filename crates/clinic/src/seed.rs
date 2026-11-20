@@ -1,8 +1,9 @@
 //! What the server knows when it starts.
 //!
-//! There's no endpoint yet to set a practitioner's hours or a clinic's appointment types, and no
-//! database, so the server starts with fixed data in the in-memory adapters. Step 2.6 adds an
-//! endpoint for the hours, and M3 moves storage to Postgres.
+//! There's no endpoint yet to set a clinic's appointment types, and no database, so the server
+//! starts with fixed data in the in-memory adapters. Hours can be set with
+//! `PUT /practitioners/{id}/hours`, but practitioner 1 starts with some so the walkthrough can book
+//! right away. M3 moves storage to Postgres.
 
 use std::error::Error;
 

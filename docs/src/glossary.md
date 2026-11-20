@@ -26,6 +26,9 @@
 - **Daylight saving time (DST)**: moving a time zone's clocks forward in
   spring and back in autumn. Each change makes some local times skipped or
   repeated.
+- **Horizon**: how far ahead weekly hours are expanded into dated shifts
+  when they are set: 28 days from the `from` date. Dates past it have no
+  shifts until the hours are set again.
 - **Patient**: a person a clinic treats. Appointments are for a patient,
   and clinical notes are about one.
 - **Practitioner**: a member of a clinic's staff who sees patients and has an
@@ -118,6 +121,9 @@
   `impl Iterator<Item = &Appointment>`, which promises a type implementing
   the trait without naming it. The compiler still knows the concrete type,
   so calls are static.
+- **Idempotent**: doing it twice has the same effect as doing it once.
+  `PUT` must be idempotent, so sending the same hours again changes
+  nothing; `POST /appointments` isn't.
 - **Integration test**: a test in a crate's `tests/` directory. It is
   compiled as a separate crate and can only use the public API.
 - **Invariant**: a rule that is always true for every value of a type, such
@@ -144,6 +150,9 @@
   clock or calendar reading with no time zone, so not yet an instant.
 - **Newtype**: a tuple struct with one field that wraps another type, to give
   it a distinct type and its own rules. `ClinicId(u64)` is one.
+- **Parsing at the edge**: turning text from outside, such as a time
+  zone name, into a typed value as soon as it arrives, in the delivery
+  layer. The use cases and the domain only ever see the type.
 - **Path parameter**: a part of a route's path that varies, such as `{id}`
   in `/practitioners/{id}/agenda`. axum's `Path` extractor reads it.
 - **Port**: a trait that says what a use case needs from the outside world,
@@ -151,6 +160,9 @@
 - **Precise capturing**: `+ use<'a>` on an `impl Trait` return type, which
   lists the lifetimes the hidden type may borrow. Without it, edition 2024
   captures every lifetime in scope.
+- **`PUT`**: the HTTP method that sets a resource to what the body says,
+  creating it if needed. Here it answers 201 when it created and 200 when
+  it replaced.
 - **Query**: a use case that only reads, such as `practitioner_agenda`. It
   takes its ports by `&` and never saves.
 - **Query string**: the part of a URL after `?`, such as
@@ -178,10 +190,10 @@
   input and is the only way to build a type. Combined with private fields,
   it makes invalid values impossible to represent.
 - **Status code**: the number at the start of an HTTP response. Here: 200
-  read, 201 booked, 400 bad header, path, query or malformed JSON, 403 role
-  not allowed, 404 no such practitioner in the path, 409 clashes with an
-  existing appointment, 415 not JSON, 422 well-formed but refused, 500
-  server fault.
+  read or replaced, 201 booked or created, 400 bad header, path, query or
+  malformed JSON, 403 role not allowed, 404 no such practitioner in the
+  path, 409 clashes with an existing appointment, 415 not JSON, 422
+  well-formed but refused, 500 server fault.
 - **Trait**: a named set of methods, functions or constants that types can
   implement, such as `Capability`.
 - **Trait bound**: a requirement on a generic type, such as

@@ -11,6 +11,7 @@
 
 pub mod agenda;
 pub mod booking;
+pub mod hours;
 pub mod in_memory;
 pub mod ports;
 pub mod weekly_hours;

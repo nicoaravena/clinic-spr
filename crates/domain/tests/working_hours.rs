@@ -114,3 +114,116 @@ fn error_implements_the_standard_error_trait() {
 
     assert_is_error(WorkingHoursError::ShiftsNotSeparated);
 }
+
+fn hours(shifts: Vec<TimeSlot>) -> WorkingHours {
+    WorkingHours::new(shifts).unwrap()
+}
+
+#[test]
+fn replacing_from_a_cut_keeps_earlier_shifts_and_takes_later_ones_from_the_replacement() {
+    let old = hours(vec![
+        slot(on(2, 9, 0), on(2, 13, 0)),
+        slot(on(3, 9, 0), on(3, 13, 0)),
+    ]);
+    let new = hours(vec![
+        slot(on(3, 14, 0), on(3, 18, 0)),
+        slot(on(4, 14, 0), on(4, 18, 0)),
+    ]);
+
+    let replaced = old.replace_from(on(3, 0, 0), &new);
+
+    assert_eq!(
+        replaced.shifts(),
+        [
+            slot(on(2, 9, 0), on(2, 13, 0)),
+            slot(on(3, 14, 0), on(3, 18, 0)),
+            slot(on(4, 14, 0), on(4, 18, 0)),
+        ]
+    );
+}
+
+#[test]
+fn replacing_drops_replacement_shifts_before_the_cut() {
+    let old = hours(vec![slot(on(2, 9, 0), on(2, 13, 0))]);
+    let new = hours(vec![
+        slot(on(2, 14, 0), on(2, 18, 0)),
+        slot(on(3, 9, 0), on(3, 13, 0)),
+    ]);
+
+    let replaced = old.replace_from(on(3, 0, 0), &new);
+
+    assert_eq!(
+        replaced.shifts(),
+        [
+            slot(on(2, 9, 0), on(2, 13, 0)),
+            slot(on(3, 9, 0), on(3, 13, 0)),
+        ]
+    );
+}
+
+#[test]
+fn shifts_that_straddle_the_cut_are_cut_short() {
+    let old = hours(vec![slot(on(2, 20, 0), on(3, 2, 0))]);
+    let new = hours(vec![slot(on(2, 23, 0), on(3, 4, 0))]);
+
+    let replaced = old.replace_from(on(3, 1, 0), &new);
+
+    // Both pieces meet at the cut, so they become one shift.
+    assert_eq!(replaced.shifts(), [slot(on(2, 20, 0), on(3, 4, 0))]);
+}
+
+#[test]
+fn a_straddling_old_shift_is_cut_short_when_nothing_meets_it() {
+    let old = hours(vec![slot(on(2, 20, 0), on(3, 2, 0))]);
+    let new = hours(vec![slot(on(3, 9, 0), on(3, 13, 0))]);
+
+    let replaced = old.replace_from(on(3, 1, 0), &new);
+
+    assert_eq!(
+        replaced.shifts(),
+        [
+            slot(on(2, 20, 0), on(3, 1, 0)),
+            slot(on(3, 9, 0), on(3, 13, 0)),
+        ]
+    );
+}
+
+#[test]
+fn a_straddling_new_shift_is_cut_short_when_nothing_meets_it() {
+    let old = hours(vec![slot(on(2, 9, 0), on(2, 13, 0))]);
+    let new = hours(vec![slot(on(2, 20, 0), on(3, 2, 0))]);
+
+    let replaced = old.replace_from(on(3, 1, 0), &new);
+
+    assert_eq!(
+        replaced.shifts(),
+        [
+            slot(on(2, 9, 0), on(2, 13, 0)),
+            slot(on(3, 1, 0), on(3, 2, 0)),
+        ]
+    );
+}
+
+#[test]
+fn replacing_with_empty_hours_clears_everything_from_the_cut() {
+    let old = hours(vec![
+        slot(on(2, 9, 0), on(2, 13, 0)),
+        slot(on(3, 9, 0), on(3, 13, 0)),
+    ]);
+
+    let replaced = old.replace_from(on(3, 0, 0), &hours(Vec::new()));
+
+    assert_eq!(replaced.shifts(), [slot(on(2, 9, 0), on(2, 13, 0))]);
+}
+
+#[test]
+fn replacing_empty_hours_takes_the_replacement_from_the_cut() {
+    let new = hours(vec![
+        slot(on(2, 9, 0), on(2, 13, 0)),
+        slot(on(3, 9, 0), on(3, 13, 0)),
+    ]);
+
+    let replaced = hours(Vec::new()).replace_from(on(3, 0, 0), &new);
+
+    assert_eq!(replaced.shifts(), [slot(on(3, 9, 0), on(3, 13, 0))]);
+}

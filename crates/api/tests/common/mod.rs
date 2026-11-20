@@ -55,9 +55,30 @@ pub(crate) fn booking(start: &str) -> Value {
 
 /// Sends `POST /appointments` with a JSON content type and returns the status and JSON body.
 pub(crate) async fn post(app: Router, clinic: Option<&str>, body: String) -> (StatusCode, Value) {
+    send_json(app, "POST", "/appointments", clinic, body).await
+}
+
+/// Sends `PUT uri` with a JSON content type and returns the status and JSON body.
+pub(crate) async fn put(
+    app: Router,
+    clinic: Option<&str>,
+    uri: &str,
+    body: String,
+) -> (StatusCode, Value) {
+    send_json(app, "PUT", uri, clinic, body).await
+}
+
+/// Sends `method uri` with `body` as JSON and returns the status and JSON body.
+async fn send_json(
+    app: Router,
+    method: &str,
+    uri: &str,
+    clinic: Option<&str>,
+    body: String,
+) -> (StatusCode, Value) {
     let mut request = Request::builder()
-        .method("POST")
-        .uri("/appointments")
+        .method(method)
+        .uri(uri)
         .header("content-type", "application/json");
     if let Some(clinic) = clinic {
         request = request.header("x-clinic-id", clinic);

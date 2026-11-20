@@ -39,6 +39,30 @@ impl Schedule {
         }
     }
 
+    /// The working hours appointments must fit in.
+    pub fn hours(&self) -> &WorkingHours {
+        &self.hours
+    }
+
+    /// Replaces the working hours, keeping every booked appointment.
+    ///
+    /// Fails if a booked appointment wouldn't fit inside a single shift of `hours`, naming the
+    /// earliest one. On failure the schedule is unchanged.
+    pub fn replace_hours(&mut self, hours: WorkingHours) -> Result<(), ReplaceHoursError> {
+        if let Some(outside) = self
+            .appointments
+            .iter()
+            .find(|appointment| !hours.contains(&appointment.slot()))
+        {
+            return Err(ReplaceHoursError::AppointmentOutsideHours {
+                existing: outside.slot(),
+            });
+        }
+
+        self.hours = hours;
+        Ok(())
+    }
+
     /// The booked appointments, sorted by start.
     pub fn appointments(&self) -> &[Appointment] {
         &self.appointments
@@ -115,6 +139,17 @@ pub enum BookingError {
     #[error("appointment overlaps an existing appointment")]
     Overlaps {
         /// The slot of the appointment already booked.
+        existing: TimeSlot,
+    },
+}
+
+/// Why [`Schedule::replace_hours`] refused new working hours.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum ReplaceHoursError {
+    /// A booked appointment wouldn't fit inside a single shift of the new hours.
+    #[error("an existing appointment would be outside the new working hours")]
+    AppointmentOutsideHours {
+        /// The slot of the earliest such appointment.
         existing: TimeSlot,
     },
 }

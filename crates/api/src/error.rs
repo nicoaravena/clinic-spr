@@ -14,8 +14,10 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use clinic_app::agenda::AgendaError;
 use clinic_app::booking::BookAppointmentError;
+use clinic_app::hours::SetHoursError;
+use clinic_app::weekly_hours::WeeklyHoursError;
 use clinic_domain::access::AccessDenied;
-use clinic_domain::schedule::BookingError;
+use clinic_domain::schedule::{BookingError, ReplaceHoursError};
 use clinic_domain::time_slot::TimeSlotError;
 use serde::Serialize;
 use thiserror::Error;
@@ -59,6 +61,16 @@ pub enum ApiError {
     /// A requested span of time doesn't end after it starts.
     #[error(transparent)]
     InvalidRange(#[from] TimeSlotError),
+    /// A time zone isn't one of the IANA names, such as `America/Santiago`. Names are matched
+    /// exactly, case included.
+    #[error("{name:?} isn't a time zone name such as \"America/Santiago\"")]
+    InvalidTimeZone {
+        /// The name that was sent.
+        name: String,
+    },
+    /// A weekly template's shifts aren't valid.
+    #[error(transparent)]
+    WeeklyHours(#[from] WeeklyHoursError),
     /// The caller's role may not do this.
     #[error(transparent)]
     AccessDenied(#[from] AccessDenied),
@@ -68,6 +80,9 @@ pub enum ApiError {
     /// The agenda query refused the request.
     #[error(transparent)]
     Agenda(#[from] AgendaError),
+    /// Setting a practitioner's hours was refused.
+    #[error(transparent)]
+    Hours(#[from] SetHoursError),
     /// Something went wrong on the server's side. The details aren't shown to the client.
     #[error("internal server error")]
     Internal,
@@ -81,7 +96,9 @@ impl ApiError {
             Self::InvalidBody { status, .. }
             | Self::InvalidPath { status, .. }
             | Self::InvalidQuery { status, .. } => *status,
-            Self::InvalidRange(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::InvalidRange(_) | Self::InvalidTimeZone { .. } | Self::WeeklyHours(_) => {
+                StatusCode::UNPROCESSABLE_ENTITY
+            }
             Self::AccessDenied(_) => StatusCode::FORBIDDEN,
             Self::Booking(error) => match error {
                 BookAppointmentError::Booking(BookingError::Overlaps { .. }) => {
@@ -96,6 +113,12 @@ impl ApiError {
             // The practitioner is the path, so a missing one is a missing resource. Booking names
             // the practitioner in its body instead, which is why it answers 422 above.
             Self::Agenda(AgendaError::UnknownPractitioner) => StatusCode::NOT_FOUND,
+            Self::Hours(error) => match error {
+                SetHoursError::OutOfRange => StatusCode::UNPROCESSABLE_ENTITY,
+                SetHoursError::Hours(ReplaceHoursError::AppointmentOutsideHours { .. }) => {
+                    StatusCode::CONFLICT
+                }
+            },
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -109,6 +132,11 @@ impl ApiError {
             Self::InvalidPath { .. } => "invalid_path",
             Self::InvalidQuery { .. } => "invalid_query",
             Self::InvalidRange(_) => "invalid_range",
+            Self::InvalidTimeZone { .. } => "invalid_time_zone",
+            Self::WeeklyHours(WeeklyHoursError::EndNotAfterStart) => "shift_end_not_after_start",
+            Self::WeeklyHours(WeeklyHoursError::ShiftsNotSeparated { .. }) => {
+                "shifts_not_separated"
+            }
             Self::AccessDenied(_) => "access_denied",
             Self::Booking(error) => match error {
                 BookAppointmentError::UnknownPractitioner => "unknown_practitioner",
@@ -120,6 +148,10 @@ impl ApiError {
                 BookAppointmentError::Booking(BookingError::Overlaps { .. }) => "overlaps",
             },
             Self::Agenda(AgendaError::UnknownPractitioner) => "unknown_practitioner",
+            Self::Hours(SetHoursError::OutOfRange) => "out_of_range",
+            Self::Hours(SetHoursError::Hours(ReplaceHoursError::AppointmentOutsideHours {
+                ..
+            })) => "appointment_outside_hours",
             Self::Internal => "internal",
         }
     }
