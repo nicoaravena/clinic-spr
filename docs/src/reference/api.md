@@ -5,7 +5,9 @@ The HTTP JSON API, as a library: an axum `Router` and its handlers.
 - **Source:** `crates/api/src/`
 - **Introduced in:** [step 2.4](../steps/2.4-http-api.md); the agenda
   route in [step 2.5](../steps/2.5-serving-http.md); the hours route in
-  [step 2.6](../steps/2.6-weekly-hours-endpoint.md)
+  [step 2.6](../steps/2.6-weekly-hours-endpoint.md); generic over the
+  storage adapters, with storage failures as 500, in
+  [step 3.1](../steps/3.1-async-ports.md)
 - **Served by:** the [`clinic` binary](clinic.md)
 - **API docs:** [`clinic_api`][api]
 
@@ -13,12 +15,12 @@ The HTTP JSON API, as a library: an axum `Router` and its handlers.
 
 | Module | Items |
 |---|---|
-| crate root | `router` |
-| `state` | `AppState` (`new`) |
+| crate root | `router::<S, T>` |
+| `state` | `AppState<S, T>` (`new`) |
 | `clinic_header` | `ClinicHeader`, `CLINIC_HEADER` |
 | `appointments` | `book` (handler), `BookAppointmentBody`, `AppointmentBody` (`new`) |
 | `practitioners` | `agenda` (handler), `AgendaParams`, `AgendaBody`; `set_hours` (handler), `SetHoursBody`, `WeeklyShiftBody`, `HoursBody`, `ShiftBody` |
-| `error` | `ApiError` (`status`, `code`; `MissingClinic`, `InvalidClinic`, `InvalidBody`, `InvalidPath`, `InvalidQuery`, `InvalidRange`, `InvalidTimeZone`, `WeeklyHours`, `AccessDenied`, `Booking`, `Agenda`, `Hours`, `Internal`) |
+| `error` | `ApiError` (`status`, `code`; `MissingClinic`, `InvalidClinic`, `InvalidBody`, `InvalidPath`, `InvalidQuery`, `InvalidRange`, `InvalidTimeZone`, `WeeklyHours`, `AccessDenied`, `Booking`, `Agenda`, `Hours`) |
 
 ## Routes
 
@@ -178,7 +180,25 @@ Every error has the same body. `error` is stable and meant for programs;
 | The appointment would end after chrono's latest date | 422 | `out_of_range` |
 | Not inside a single shift of the working hours | 422 | `outside_working_hours` |
 | Overlaps an appointment already booked | 409 | `overlaps` |
-| The storage lock was poisoned by a panic | 500 | `internal` |
+| Storage failed (never with the in-memory adapters) | 500 | `internal` |
+
+Every 500 has the message `internal server error`, whatever the cause. The
+cause, with its chain of sources, is written to stderr as one line, such as
+`clinic-api: 500 Internal Server Error: storage failed: connection refused`.
+It can name hosts or tables, so it isn't sent to the client.
+
+## Storage and the lock
+
+`router`, `AppState` and the handlers are generic over `S:
+ScheduleRepository` and `T: AppointmentTypes`, each `Send + Sync +
+'static`. The `clinic` binary picks the types. They're type parameters
+rather than trait objects because the ports' async methods can't be called
+through `dyn`.
+
+The adapters sit behind one `Arc<tokio::sync::Mutex<_>>`. A handler holds
+the lock across its use case's `.await`s, which a `std::sync::Mutex` guard
+can't do in a handler that has to be `Send`. tokio's mutex isn't poisoned
+by a panic, so taking the lock can't fail.
 
 ## Rules and how they are enforced
 
@@ -189,8 +209,9 @@ Every error has the same body. `error` is stable and meant for programs;
 | Rules stay in the domain and `app` | `book` calls `book_appointment`, `agenda` calls `practitioner_agenda` and `set_hours` calls `set_weekly_hours`, and each maps the errors; none checks a rule itself |
 | Text is parsed into types at the edge | `set_hours` parses the time zone name into a `Tz`, and serde reads dates, times and weekdays, before any use case runs |
 | A read never sees a half-saved schedule | `agenda` takes the same lock as `book` |
-| Two requests can't book the same slot | The store's lock is held across `book_appointment`'s read, book and save; tested with 20 concurrent requests |
-| Every refusal has a deliberate status | `ApiError::status` matches every `BookingError`, `AgendaError`, `WeeklyHoursError` and `SetHoursError` without a wildcard, so a new one doesn't compile until it's mapped |
+| Two requests can't book the same slot | The store's lock is held across `book_appointment`'s read, book and save, `.await`s included; tested with 20 concurrent requests |
+| A storage failure doesn't leak details | Every 5xx answers the fixed message `internal server error` and logs the cause to stderr; tested over HTTP for every route in `tests/storage_errors.rs` |
+| Every refusal has a deliberate status | `ApiError::status` matches every `BookAppointmentError`, `AgendaError`, `WeeklyHoursError` and `SetHoursError` variant without a wildcard, `Storage` included, so a new one doesn't compile until it's mapped |
 | The domain doesn't depend on serde | JSON shapes are separate DTOs in `appointments` and `practitioners` |
 
 [api]: ../../../target/doc/clinic_api/index.html

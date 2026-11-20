@@ -5,7 +5,9 @@ adapters, builds the router from [`clinic-api`](api.md) and serves it.
 
 - **Source:** `crates/clinic/src/`
 - **Introduced in:** the [interlude](../steps/interlude-running-the-clinic.md)
-  as a scripted day; the server since [step 2.5](../steps/2.5-serving-http.md)
+  as a scripted day; the server since [step 2.5](../steps/2.5-serving-http.md);
+  names the adapter types for the generic router since
+  [step 3.1](../steps/3.1-async-ports.md)
 
 ## Running it
 
@@ -31,7 +33,9 @@ commands to try against it. Ctrl-C stops it.
 stdout is never written. stderr gets one line when the server is ready,
 `clinic listening on http://<address>` (with the real port, even when
 `CLINIC_ADDR` asked for port 0), and one when it stops, `clinic shutting
-down`. A startup failure is one line starting with `clinic: `.
+down`. A startup failure is one line starting with `clinic: `. A request
+that fails on the server's side adds a line starting with `clinic-api: `
+(see [api errors](api.md#errors)); the in-memory storage never does.
 
 ## Signals and exit codes
 
@@ -54,6 +58,10 @@ and loses every booking when it stops:
 |---|---|---|
 | 1 | Consultation (30 min), Follow-up (15 min) | 1: works 09:00-12:00 and 13:00-17:00 UTC on Monday 2026-03-02, nothing booked |
 | 2 | Consultation (30 min) | none |
+
+The seed is saved through the same async `ScheduleRepository::save` the
+use cases call, so a seed that couldn't be saved stops the server from
+starting.
 
 Clinic 2 is there to show that one clinic can't reach another's data.
 Other practitioners get hours through `PUT /practitioners/{id}/hours`

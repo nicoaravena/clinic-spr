@@ -21,7 +21,7 @@ Decisions:
 
 ## Progress
 
-Current step: **3.1** (M2 is done; 3.1 has not started)
+Current step: **3.1**
 
 ## How each step works
 

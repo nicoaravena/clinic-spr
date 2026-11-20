@@ -1,6 +1,7 @@
 //! Adapters that keep everything in memory, for tests and for the first server.
 //!
-//! Nothing survives a restart. The database adapters replace these.
+//! Nothing survives a restart, and nothing ever fails: every port method returns `Ok`. The database
+//! adapters replace these.
 //!
 //! The fields are private, so the only way to add an appointment type is
 //! [`InMemoryAppointmentTypes::add`], which keeps names unique within a clinic:
@@ -20,7 +21,7 @@ use clinic_domain::ids::{ClinicId, PractitionerId};
 use clinic_domain::schedule::Schedule;
 use thiserror::Error;
 
-use crate::ports::{AppointmentTypes, ScheduleRepository};
+use crate::ports::{AppointmentTypes, ScheduleRepository, StorageError};
 
 /// A [`ScheduleRepository`] backed by a `HashMap`.
 ///
@@ -38,12 +39,22 @@ impl InMemorySchedules {
 }
 
 impl ScheduleRepository for InMemorySchedules {
-    fn get(&self, clinic: ClinicId, practitioner: PractitionerId) -> Option<Schedule> {
-        self.schedules.get(&(clinic, practitioner)).cloned()
+    async fn get(
+        &self,
+        clinic: ClinicId,
+        practitioner: PractitionerId,
+    ) -> Result<Option<Schedule>, StorageError> {
+        Ok(self.schedules.get(&(clinic, practitioner)).cloned())
     }
 
-    fn save(&mut self, clinic: ClinicId, practitioner: PractitionerId, schedule: Schedule) {
+    async fn save(
+        &mut self,
+        clinic: ClinicId,
+        practitioner: PractitionerId,
+        schedule: Schedule,
+    ) -> Result<(), StorageError> {
         self.schedules.insert((clinic, practitioner), schedule);
+        Ok(())
     }
 }
 
@@ -85,12 +96,17 @@ impl InMemoryAppointmentTypes {
 }
 
 impl AppointmentTypes for InMemoryAppointmentTypes {
-    fn find(&self, clinic: ClinicId, name: &str) -> Option<AppointmentType> {
-        self.types
-            .get(&clinic)?
-            .iter()
-            .find(|appointment_type| appointment_type.name() == name)
-            .cloned()
+    async fn find(
+        &self,
+        clinic: ClinicId,
+        name: &str,
+    ) -> Result<Option<AppointmentType>, StorageError> {
+        Ok(self.types.get(&clinic).and_then(|offered| {
+            offered
+                .iter()
+                .find(|appointment_type| appointment_type.name() == name)
+                .cloned()
+        }))
     }
 }
 

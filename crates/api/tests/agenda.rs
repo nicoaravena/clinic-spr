@@ -9,7 +9,7 @@ use common::{app, booking, get, post};
 /// The app from `common`, with practitioner 1 at clinic 1 booked at 11:00 and 09:00, in that
 /// order, so the agenda has to sort them.
 async fn booked_app() -> Router {
-    let app = app();
+    let app = app().await;
     for start in ["2026-03-02T11:00:00Z", "2026-03-02T09:00:00Z"] {
         let (status, body) = post(app.clone(), Some("1"), booking(start).to_string()).await;
         assert_eq!(status, StatusCode::CREATED, "seeding {start}: {body}");
@@ -110,7 +110,7 @@ async fn another_clinic_cannot_read_this_clinics_agenda() {
 async fn an_unknown_practitioner_is_not_found() {
     let uri = agenda_uri("9", "2026-03-02T09:00:00Z", "2026-03-02T12:00:00Z");
 
-    let (status, body) = get(app(), Some("1"), &uri).await;
+    let (status, body) = get(app().await, Some("1"), &uri).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"], "unknown_practitioner");
@@ -120,8 +120,8 @@ async fn an_unknown_practitioner_is_not_found() {
 async fn a_missing_or_invalid_clinic_header_is_a_bad_request() {
     let uri = agenda_uri("1", "2026-03-02T09:00:00Z", "2026-03-02T12:00:00Z");
 
-    let (missing, missing_body) = get(app(), None, &uri).await;
-    let (invalid, invalid_body) = get(app(), Some("abc"), &uri).await;
+    let (missing, missing_body) = get(app().await, None, &uri).await;
+    let (invalid, invalid_body) = get(app().await, Some("abc"), &uri).await;
 
     assert_eq!(missing, StatusCode::BAD_REQUEST);
     assert_eq!(missing_body["error"], "missing_clinic_id");
@@ -134,7 +134,7 @@ async fn a_practitioner_id_that_is_not_a_whole_number_is_a_bad_request() {
     for practitioner in ["abc", "-1", "1.5"] {
         let uri = agenda_uri(practitioner, "2026-03-02T09:00:00Z", "2026-03-02T12:00:00Z");
 
-        let (status, body) = get(app(), Some("1"), &uri).await;
+        let (status, body) = get(app().await, Some("1"), &uri).await;
 
         assert_eq!(status, StatusCode::BAD_REQUEST, "id: {practitioner:?}");
         assert_eq!(body["error"], "invalid_path", "id: {practitioner:?}");
@@ -158,7 +158,7 @@ async fn a_missing_mistyped_or_unknown_query_parameter_is_a_bad_request() {
     ];
 
     for uri in uris {
-        let (status, body) = get(app(), Some("1"), &uri).await;
+        let (status, body) = get(app().await, Some("1"), &uri).await;
 
         assert_eq!(status, StatusCode::BAD_REQUEST, "uri: {uri}");
         assert_eq!(body["error"], "invalid_query", "uri: {uri}");
@@ -175,7 +175,7 @@ async fn a_range_that_does_not_end_after_it_starts_is_unprocessable() {
         ("2026-03-02T12:00:00Z", "2026-03-02T09:00:00Z"),
         ("2026-03-02T09:00:00Z", "2026-03-02T09:00:00Z"),
     ] {
-        let (status, body) = get(app(), Some("1"), &agenda_uri("1", from, to)).await;
+        let (status, body) = get(app().await, Some("1"), &agenda_uri("1", from, to)).await;
 
         assert_eq!(
             status,

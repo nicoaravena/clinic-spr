@@ -7,6 +7,9 @@ use clinic_api::error::ApiError;
 use clinic_api::state::AppState;
 use clinic_app::agenda::AgendaError;
 use clinic_app::booking::BookAppointmentError;
+use clinic_app::hours::SetHoursError;
+use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemorySchedules};
+use clinic_app::ports::StorageError;
 use clinic_domain::access::{ClinicalAccess, Role};
 use clinic_domain::schedule::BookingError;
 use clinic_domain::time_slot::{TimeSlot, TimeSlotError};
@@ -17,7 +20,7 @@ use common::{app, at, booking, post, send};
 #[tokio::test]
 async fn a_valid_booking_is_created_and_returned() {
     let (status, body) = post(
-        app(),
+        app().await,
         Some("1"),
         booking("2026-03-02T10:00:00Z").to_string(),
     )
@@ -39,7 +42,7 @@ async fn a_valid_booking_is_created_and_returned() {
 
 #[tokio::test]
 async fn a_booking_is_saved_so_the_same_slot_is_refused_next_time() {
-    let app = app();
+    let app = app().await;
     let body = booking("2026-03-02T10:00:00Z").to_string();
 
     let (first, _) = post(app.clone(), Some("1"), body.clone()).await;
@@ -53,7 +56,7 @@ async fn a_booking_is_saved_so_the_same_slot_is_refused_next_time() {
 #[tokio::test]
 async fn a_start_with_an_offset_is_read_as_the_same_instant_in_utc() {
     let (status, body) = post(
-        app(),
+        app().await,
         Some("1"),
         booking("2026-03-02T07:00:00-03:00").to_string(),
     )
@@ -65,7 +68,12 @@ async fn a_start_with_an_offset_is_read_as_the_same_instant_in_utc() {
 
 #[tokio::test]
 async fn a_missing_clinic_header_is_a_bad_request() {
-    let (status, body) = post(app(), None, booking("2026-03-02T10:00:00Z").to_string()).await;
+    let (status, body) = post(
+        app().await,
+        None,
+        booking("2026-03-02T10:00:00Z").to_string(),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "missing_clinic_id");
@@ -75,7 +83,7 @@ async fn a_missing_clinic_header_is_a_bad_request() {
 async fn a_clinic_header_that_is_not_a_whole_number_is_a_bad_request() {
     for clinic in ["abc", "-1", "1.5", ""] {
         let (status, body) = post(
-            app(),
+            app().await,
             Some(clinic),
             booking("2026-03-02T10:00:00Z").to_string(),
         )
@@ -92,7 +100,7 @@ async fn a_clinic_header_that_is_not_a_whole_number_is_a_bad_request() {
 #[tokio::test]
 async fn another_clinic_cannot_book_into_this_clinics_practitioner() {
     let (status, body) = post(
-        app(),
+        app().await,
         Some("2"),
         booking("2026-03-02T10:00:00Z").to_string(),
     )
@@ -107,7 +115,7 @@ async fn an_unknown_appointment_type_is_unprocessable() {
     let mut body = booking("2026-03-02T10:00:00Z");
     body["appointment_type"] = json!("Check-up");
 
-    let (status, body) = post(app(), Some("1"), body.to_string()).await;
+    let (status, body) = post(app().await, Some("1"), body.to_string()).await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["error"], "unknown_appointment_type");
@@ -116,7 +124,7 @@ async fn an_unknown_appointment_type_is_unprocessable() {
 #[tokio::test]
 async fn a_booking_outside_working_hours_is_unprocessable() {
     let (status, body) = post(
-        app(),
+        app().await,
         Some("1"),
         booking("2026-03-02T11:45:00Z").to_string(),
     )
@@ -128,7 +136,7 @@ async fn a_booking_outside_working_hours_is_unprocessable() {
 
 #[tokio::test]
 async fn an_overlapping_booking_is_a_conflict_with_a_readable_message() {
-    let app = app();
+    let app = app().await;
     post(
         app.clone(),
         Some("1"),
@@ -150,7 +158,7 @@ async fn an_overlapping_booking_is_a_conflict_with_a_readable_message() {
 
 #[tokio::test]
 async fn a_body_that_is_not_valid_json_is_rejected_as_invalid_body() {
-    let (status, body) = post(app(), Some("1"), "{not json".to_owned()).await;
+    let (status, body) = post(app().await, Some("1"), "{not json".to_owned()).await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "invalid_body");
@@ -166,7 +174,7 @@ async fn a_body_with_a_missing_wrong_or_unknown_field_is_rejected_as_invalid_bod
     let not_a_time = booking("10:00");
 
     for body in [missing, wrong_type, unknown, not_a_time] {
-        let (status, error) = post(app(), Some("1"), body.to_string()).await;
+        let (status, error) = post(app().await, Some("1"), body.to_string()).await;
 
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "body: {body}");
         assert_eq!(error["error"], "invalid_body", "body: {body}");
@@ -186,7 +194,7 @@ async fn a_body_without_a_json_content_type_is_unsupported() {
         .body(Body::from(booking("2026-03-02T10:00:00Z").to_string()))
         .unwrap();
 
-    let (status, body) = send(app(), request).await;
+    let (status, body) = send(app().await, request).await;
 
     assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
     assert_eq!(body["error"], "invalid_body");
@@ -194,7 +202,7 @@ async fn a_body_without_a_json_content_type_is_unsupported() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_bookings_of_the_same_slot_let_exactly_one_through() {
-    let app = app();
+    let app = app().await;
     let body = booking("2026-03-02T10:00:00Z").to_string();
 
     let requests: Vec<_> = (0..20)
@@ -266,7 +274,17 @@ fn every_api_error_has_its_documented_status_and_code() {
             "access_denied",
         ),
         (
-            ApiError::Internal,
+            ApiError::from(BookAppointmentError::from(StorageError::new("down"))),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal",
+        ),
+        (
+            ApiError::from(AgendaError::from(StorageError::new("down"))),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal",
+        ),
+        (
+            ApiError::from(SetHoursError::from(StorageError::new("down"))),
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal",
         ),
@@ -293,5 +311,5 @@ fn every_api_error_has_its_documented_status_and_code() {
 fn app_state_can_be_shared_between_tasks_and_threads() {
     fn assert_shareable<T: Clone + Send + Sync + 'static>() {}
 
-    assert_shareable::<AppState>();
+    assert_shareable::<AppState<InMemorySchedules, InMemoryAppointmentTypes>>();
 }

@@ -23,7 +23,8 @@ use clinic_domain::working_hours::WorkingHours;
 ///   works 09:00-12:00 and 13:00-17:00 UTC on Monday 2026-03-02, with nothing booked.
 /// - Clinic 2 offers "Consultation" too, but has no practitioners. It shows that one clinic can't
 ///   reach another's data.
-pub(crate) fn demo_state() -> Result<AppState, Box<dyn Error>> {
+pub(crate) async fn demo_state()
+-> Result<AppState<InMemorySchedules, InMemoryAppointmentTypes>, Box<dyn Error>> {
     let first = ClinicId::new(1);
     let second = ClinicId::new(2);
     let consultation = AppointmentType::new("Consultation", TimeDelta::minutes(30))?;
@@ -39,7 +40,9 @@ pub(crate) fn demo_state() -> Result<AppState, Box<dyn Error>> {
         TimeSlot::new(at(13, 0), at(17, 0))?,
     ])?;
     let mut schedules = InMemorySchedules::new();
-    schedules.save(first, PractitionerId::new(1), Schedule::new(hours));
+    schedules
+        .save(first, PractitionerId::new(1), Schedule::new(hours))
+        .await?;
 
     Ok(AppState::new(schedules, types))
 }

@@ -5,7 +5,11 @@
 //! adapters; the database ones come later and live in their own crate.
 //!
 //! Like the domain, this crate does no I/O of its own. Every port method takes the [`ClinicId`] it
-//! works in, so no use case can reach data without naming the clinic it belongs to.
+//! works in, so no use case can reach data without naming the clinic it belongs to. Port methods
+//! are `async` and can fail with a [`StorageError`], so the use cases are `async` too and pass that
+//! error on.
+//!
+//! [`StorageError`]: ports::StorageError
 //!
 //! [`ClinicId`]: clinic_domain::ids::ClinicId
 

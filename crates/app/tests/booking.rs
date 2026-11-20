@@ -1,7 +1,7 @@
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use clinic_app::booking::{BookAppointmentError, BookingRequest, book_appointment};
 use clinic_app::in_memory::{InMemoryAppointmentTypes, InMemorySchedules};
-use clinic_app::ports::{AppointmentTypes, ScheduleRepository};
+use clinic_app::ports::ScheduleRepository;
 use clinic_domain::access::{Role, ScheduleAccess};
 use clinic_domain::appointment::{AppointmentStatus, AppointmentType};
 use clinic_domain::ids::{ClinicId, PatientId, PractitionerId};
@@ -34,10 +34,13 @@ fn access() -> ScheduleAccess {
 }
 
 /// Ana works 09:00-12:00 at clinic 1, which offers a 30-minute consultation.
-fn seeded() -> (InMemorySchedules, InMemoryAppointmentTypes) {
+async fn seeded() -> (InMemorySchedules, InMemoryAppointmentTypes) {
     let mut schedules = InMemorySchedules::new();
     let hours = WorkingHours::new(vec![slot(at(9, 0), at(12, 0))]).unwrap();
-    schedules.save(clinic(), ana(), Schedule::new(hours));
+    schedules
+        .save(clinic(), ana(), Schedule::new(hours))
+        .await
+        .unwrap();
 
     let mut types = InMemoryAppointmentTypes::new();
     types.add(clinic(), consultation()).unwrap();
@@ -55,12 +58,13 @@ fn request(start: DateTime<Utc>) -> BookingRequest<'static> {
     }
 }
 
-#[test]
-fn books_and_returns_the_appointment() {
-    let (mut schedules, types) = seeded();
+#[tokio::test]
+async fn books_and_returns_the_appointment() {
+    let (mut schedules, types) = seeded().await;
 
-    let appointment =
-        book_appointment(&mut schedules, &types, &access(), request(at(9, 0))).unwrap();
+    let appointment = book_appointment(&mut schedules, &types, &access(), request(at(9, 0)))
+        .await
+        .unwrap();
 
     assert_eq!(appointment.patient(), PatientId::new(7));
     assert_eq!(appointment.appointment_type(), &consultation());
@@ -68,109 +72,133 @@ fn books_and_returns_the_appointment() {
     assert_eq!(appointment.status(), AppointmentStatus::Scheduled);
 }
 
-#[test]
-fn saves_the_booking_in_the_schedule() {
-    let (mut schedules, types) = seeded();
+#[tokio::test]
+async fn saves_the_booking_in_the_schedule() {
+    let (mut schedules, types) = seeded().await;
 
-    let appointment =
-        book_appointment(&mut schedules, &types, &access(), request(at(9, 0))).unwrap();
+    let appointment = book_appointment(&mut schedules, &types, &access(), request(at(9, 0)))
+        .await
+        .unwrap();
 
-    let saved = schedules.get(clinic(), ana()).unwrap();
+    let saved = schedules.get(clinic(), ana()).await.unwrap().unwrap();
     assert_eq!(saved.appointments(), [appointment]);
 }
 
-#[test]
-fn refuses_an_unknown_appointment_type() {
-    let (mut schedules, types) = seeded();
+#[tokio::test]
+async fn refuses_an_unknown_appointment_type() {
+    let (mut schedules, types) = seeded().await;
     let request = BookingRequest {
         appointment_type: "Check-up",
         ..request(at(9, 0))
     };
 
-    assert_eq!(
-        book_appointment(&mut schedules, &types, &access(), request),
-        Err(BookAppointmentError::UnknownAppointmentType),
+    let result = book_appointment(&mut schedules, &types, &access(), request).await;
+
+    assert!(
+        matches!(result, Err(BookAppointmentError::UnknownAppointmentType)),
+        "{result:?}"
     );
 }
 
-#[test]
-fn refuses_an_unknown_practitioner() {
-    let (mut schedules, types) = seeded();
+#[tokio::test]
+async fn refuses_an_unknown_practitioner() {
+    let (mut schedules, types) = seeded().await;
     let request = BookingRequest {
         practitioner: PractitionerId::new(2),
         ..request(at(9, 0))
     };
 
-    assert_eq!(
-        book_appointment(&mut schedules, &types, &access(), request),
-        Err(BookAppointmentError::UnknownPractitioner),
+    let result = book_appointment(&mut schedules, &types, &access(), request).await;
+
+    assert!(
+        matches!(result, Err(BookAppointmentError::UnknownPractitioner)),
+        "{result:?}"
     );
 }
 
-#[test]
-fn the_practitioner_is_checked_before_the_appointment_type() {
-    let (mut schedules, types) = seeded();
+#[tokio::test]
+async fn the_practitioner_is_checked_before_the_appointment_type() {
+    let (mut schedules, types) = seeded().await;
     let request = BookingRequest {
         practitioner: PractitionerId::new(2),
         appointment_type: "Check-up",
         ..request(at(9, 0))
     };
 
-    assert_eq!(
-        book_appointment(&mut schedules, &types, &access(), request),
-        Err(BookAppointmentError::UnknownPractitioner),
+    let result = book_appointment(&mut schedules, &types, &access(), request).await;
+
+    assert!(
+        matches!(result, Err(BookAppointmentError::UnknownPractitioner)),
+        "{result:?}"
     );
 }
 
-#[test]
-fn cannot_book_into_another_clinics_schedule() {
-    let (mut schedules, mut types) = seeded();
+#[tokio::test]
+async fn cannot_book_into_another_clinics_schedule() {
+    let (mut schedules, mut types) = seeded().await;
     types.add(ClinicId::new(2), consultation()).unwrap();
     let request = BookingRequest {
         clinic: ClinicId::new(2),
         ..request(at(9, 0))
     };
 
-    assert_eq!(
-        book_appointment(&mut schedules, &types, &access(), request),
-        Err(BookAppointmentError::UnknownPractitioner),
+    let result = book_appointment(&mut schedules, &types, &access(), request).await;
+
+    assert!(
+        matches!(result, Err(BookAppointmentError::UnknownPractitioner)),
+        "{result:?}"
     );
 }
 
-#[test]
-fn passes_on_the_domain_refusal() {
-    let (mut schedules, types) = seeded();
-    book_appointment(&mut schedules, &types, &access(), request(at(9, 0))).unwrap();
+#[tokio::test]
+async fn passes_on_the_domain_refusal() {
+    let (mut schedules, types) = seeded().await;
+    book_appointment(&mut schedules, &types, &access(), request(at(9, 0)))
+        .await
+        .unwrap();
 
-    assert_eq!(
-        book_appointment(&mut schedules, &types, &access(), request(at(9, 15))),
-        Err(BookAppointmentError::Booking(BookingError::Overlaps {
-            existing: slot(at(9, 0), at(9, 30)),
-        })),
+    let result = book_appointment(&mut schedules, &types, &access(), request(at(9, 15))).await;
+
+    assert!(
+        matches!(
+            result,
+            Err(BookAppointmentError::Booking(BookingError::Overlaps { existing }))
+                if existing == slot(at(9, 0), at(9, 30))
+        ),
+        "{result:?}"
     );
 }
 
-#[test]
-fn a_refused_booking_leaves_the_stored_schedule_unchanged() {
-    let (mut schedules, types) = seeded();
-    book_appointment(&mut schedules, &types, &access(), request(at(9, 0))).unwrap();
-    let before = schedules.get(clinic(), ana());
+#[tokio::test]
+async fn a_refused_booking_leaves_the_stored_schedule_unchanged() {
+    let (mut schedules, types) = seeded().await;
+    book_appointment(&mut schedules, &types, &access(), request(at(9, 0)))
+        .await
+        .unwrap();
+    let before = schedules.get(clinic(), ana()).await.unwrap();
 
-    let overlapping = book_appointment(&mut schedules, &types, &access(), request(at(9, 15)));
-    let outside = book_appointment(&mut schedules, &types, &access(), request(at(11, 45)));
+    let overlapping = book_appointment(&mut schedules, &types, &access(), request(at(9, 15))).await;
+    let outside = book_appointment(&mut schedules, &types, &access(), request(at(11, 45))).await;
 
     assert!(overlapping.is_err());
     assert!(outside.is_err());
-    assert_eq!(schedules.get(clinic(), ana()), before);
+    assert_eq!(schedules.get(clinic(), ana()).await.unwrap(), before);
 }
 
-#[test]
-fn works_through_trait_objects() {
-    let (mut schedules, types) = seeded();
-    let schedules: &mut dyn ScheduleRepository = &mut schedules;
-    let types: &dyn AppointmentTypes = &types;
+#[tokio::test]
+async fn the_booking_future_can_move_between_threads() {
+    fn assert_send<F: Send>(future: F) -> F {
+        future
+    }
+    let (mut schedules, types) = seeded().await;
 
-    assert!(book_appointment(schedules, types, &access(), request(at(9, 0))).is_ok());
+    // The future borrows its arguments until it's awaited, so `access` needs a name.
+    let access = access();
+
+    // A multi-threaded runtime such as axum's may resume the future on another thread.
+    let booking = book_appointment(&mut schedules, &types, &access, request(at(9, 0)));
+
+    assert!(assert_send(booking).await.is_ok());
 }
 
 #[test]

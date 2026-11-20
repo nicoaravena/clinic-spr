@@ -10,7 +10,7 @@ use clinic_domain::ids::{ClinicId, PatientId, PractitionerId};
 use clinic_domain::schedule::BookingError;
 use thiserror::Error;
 
-use crate::ports::{AppointmentTypes, ScheduleRepository};
+use crate::ports::{AppointmentTypes, ScheduleRepository, StorageError};
 
 /// What to book, for whom, with whom, and when.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,36 +35,41 @@ pub struct BookingRequest<'a> {
 /// 2. The clinic must offer the named appointment type.
 /// 3. The domain's booking rules must accept it.
 ///
-/// On failure nothing is saved. `access` proves the caller may manage schedules.
-///
-/// `?Sized` lets `S` and `T` be trait objects, so `&mut dyn ScheduleRepository` works too.
-pub fn book_appointment<S, T>(
+/// Storage can fail at any of them, or when saving. The booking is only returned once it's saved,
+/// and if a check fails nothing is saved. `access` proves the caller may manage schedules.
+pub async fn book_appointment<S, T>(
     schedules: &mut S,
     types: &T,
     _access: &ScheduleAccess,
     request: BookingRequest<'_>,
 ) -> Result<Appointment, BookAppointmentError>
 where
-    S: ScheduleRepository + ?Sized,
-    T: AppointmentTypes + ?Sized,
+    S: ScheduleRepository,
+    T: AppointmentTypes,
 {
     let mut schedule = schedules
         .get(request.clinic, request.practitioner)
+        .await?
         .ok_or(BookAppointmentError::UnknownPractitioner)?;
     let appointment_type = types
         .find(request.clinic, request.appointment_type)
+        .await?
         .ok_or(BookAppointmentError::UnknownAppointmentType)?;
 
     let appointment = schedule
         .book(request.patient, request.start, appointment_type)?
         .clone();
-    schedules.save(request.clinic, request.practitioner, schedule);
+    schedules
+        .save(request.clinic, request.practitioner, schedule)
+        .await?;
 
     Ok(appointment)
 }
 
 /// Why [`book_appointment`] refused a booking.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+///
+/// It isn't `Clone` or `PartialEq`, because a [`StorageError`] holds its cause as a boxed error.
+#[derive(Debug, Error)]
 pub enum BookAppointmentError {
     /// The practitioner has no schedule at this clinic.
     #[error("clinic has no schedule for that practitioner")]
@@ -75,4 +80,7 @@ pub enum BookAppointmentError {
     /// The domain's booking rules refused it.
     #[error(transparent)]
     Booking(#[from] BookingError),
+    /// The schedule or the appointment types couldn't be read, or the booking couldn't be saved.
+    #[error(transparent)]
+    Storage(#[from] StorageError),
 }

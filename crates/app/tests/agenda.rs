@@ -35,7 +35,7 @@ fn access() -> ScheduleAccess {
 
 /// Ana works 09:00-12:00 at clinic 1, with consultations at 09:00 for patient 7 and at 11:00 for
 /// patient 8.
-fn seeded() -> InMemorySchedules {
+async fn seeded() -> InMemorySchedules {
     let hours = WorkingHours::new(vec![slot(at(9, 0), at(12, 0))]).unwrap();
     let mut schedule = Schedule::new(hours);
     schedule
@@ -46,7 +46,7 @@ fn seeded() -> InMemorySchedules {
         .unwrap();
 
     let mut schedules = InMemorySchedules::new();
-    schedules.save(clinic(), ana(), schedule);
+    schedules.save(clinic(), ana(), schedule).await.unwrap();
     schedules
 }
 
@@ -58,12 +58,13 @@ fn query(range: TimeSlot) -> AgendaQuery {
     }
 }
 
-#[test]
-fn returns_the_appointments_in_the_range_sorted_by_start() {
-    let schedules = seeded();
+#[tokio::test]
+async fn returns_the_appointments_in_the_range_sorted_by_start() {
+    let schedules = seeded().await;
 
-    let agenda =
-        practitioner_agenda(&schedules, &access(), query(slot(at(9, 0), at(12, 0)))).unwrap();
+    let agenda = practitioner_agenda(&schedules, &access(), query(slot(at(9, 0), at(12, 0))))
+        .await
+        .unwrap();
 
     assert_eq!(agenda.len(), 2);
     assert_eq!(agenda[0].patient(), PatientId::new(7));
@@ -74,63 +75,75 @@ fn returns_the_appointments_in_the_range_sorted_by_start() {
     assert_eq!(agenda[1].slot(), slot(at(11, 0), at(11, 30)));
 }
 
-#[test]
-fn leaves_out_appointments_outside_the_range() {
-    let schedules = seeded();
+#[tokio::test]
+async fn leaves_out_appointments_outside_the_range() {
+    let schedules = seeded().await;
 
-    let agenda =
-        practitioner_agenda(&schedules, &access(), query(slot(at(10, 0), at(12, 0)))).unwrap();
+    let agenda = practitioner_agenda(&schedules, &access(), query(slot(at(10, 0), at(12, 0))))
+        .await
+        .unwrap();
 
     assert_eq!(agenda.len(), 1);
     assert_eq!(agenda[0].slot(), slot(at(11, 0), at(11, 30)));
 }
 
-#[test]
-fn a_range_with_no_appointments_gives_an_empty_agenda() {
-    let schedules = seeded();
+#[tokio::test]
+async fn a_range_with_no_appointments_gives_an_empty_agenda() {
+    let schedules = seeded().await;
 
-    assert_eq!(
-        practitioner_agenda(&schedules, &access(), query(slot(at(9, 30), at(11, 0)))),
-        Ok(Vec::new()),
-    );
+    let agenda = practitioner_agenda(&schedules, &access(), query(slot(at(9, 30), at(11, 0))))
+        .await
+        .unwrap();
+
+    assert!(agenda.is_empty());
 }
 
-#[test]
-fn refuses_an_unknown_practitioner() {
-    let schedules = seeded();
+#[tokio::test]
+async fn refuses_an_unknown_practitioner() {
+    let schedules = seeded().await;
     let query = AgendaQuery {
         practitioner: PractitionerId::new(2),
         ..query(slot(at(9, 0), at(12, 0)))
     };
 
-    assert_eq!(
-        practitioner_agenda(&schedules, &access(), query),
-        Err(AgendaError::UnknownPractitioner),
+    let result = practitioner_agenda(&schedules, &access(), query).await;
+
+    assert!(
+        matches!(result, Err(AgendaError::UnknownPractitioner)),
+        "{result:?}"
     );
 }
 
-#[test]
-fn cannot_read_another_clinics_agenda() {
-    let schedules = seeded();
+#[tokio::test]
+async fn cannot_read_another_clinics_agenda() {
+    let schedules = seeded().await;
     let query = AgendaQuery {
         clinic: ClinicId::new(2),
         ..query(slot(at(9, 0), at(12, 0)))
     };
 
-    assert_eq!(
-        practitioner_agenda(&schedules, &access(), query),
-        Err(AgendaError::UnknownPractitioner),
+    let result = practitioner_agenda(&schedules, &access(), query).await;
+
+    assert!(
+        matches!(result, Err(AgendaError::UnknownPractitioner)),
+        "{result:?}"
     );
 }
 
-#[test]
-fn works_through_a_trait_object() {
-    let schedules = seeded();
-    let schedules: &dyn ScheduleRepository = &schedules;
+#[tokio::test]
+async fn the_agenda_future_can_move_between_threads() {
+    fn assert_send<F: Send>(future: F) -> F {
+        future
+    }
+    let schedules = seeded().await;
 
-    let agenda = practitioner_agenda(schedules, &access(), query(slot(at(9, 0), at(12, 0))));
+    // The future borrows its arguments until it's awaited, so `access` needs a name.
+    let access = access();
 
-    assert_eq!(agenda.map(|agenda| agenda.len()), Ok(2));
+    // A multi-threaded runtime such as axum's may resume the future on another thread.
+    let agenda = practitioner_agenda(&schedules, &access, query(slot(at(9, 0), at(12, 0))));
+
+    assert_eq!(assert_send(agenda).await.unwrap().len(), 2);
 }
 
 #[test]

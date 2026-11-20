@@ -12,7 +12,7 @@ use clinic_domain::schedule::{ReplaceHoursError, Schedule};
 use clinic_domain::working_hours::WorkingHours;
 use thiserror::Error;
 
-use crate::ports::ScheduleRepository;
+use crate::ports::{ScheduleRepository, StorageError};
 use crate::weekly_hours::WeeklyHours;
 
 /// How many days of shifts one call expands, starting on its `from` date.
@@ -61,17 +61,16 @@ pub enum HoursOutcome {
 ///
 /// A practitioner without a schedule at the clinic gets a new one. Otherwise the shifts before
 /// `from` starts are kept, everything after is replaced, and every booked appointment must still
-/// fit. Setting the same hours twice leaves the same schedule. On failure nothing is saved.
-/// `access` proves the caller may manage schedules.
-///
-/// `?Sized` lets `S` be a trait object, so `&mut dyn ScheduleRepository` works too.
-pub fn set_weekly_hours<S>(
+/// fit. Setting the same hours twice leaves the same schedule. If the new hours are refused,
+/// nothing is saved; if storage fails, the error says so. `access` proves the caller may manage
+/// schedules.
+pub async fn set_weekly_hours<S>(
     schedules: &mut S,
     _access: &ScheduleAccess,
     request: SetHoursRequest,
 ) -> Result<HoursSet, SetHoursError>
 where
-    S: ScheduleRepository + ?Sized,
+    S: ScheduleRepository,
 {
     let from = request.from;
     let until = from
@@ -87,7 +86,7 @@ where
 
     let shifts = request.hours.working_hours(from, until);
 
-    let (schedule, outcome) = match schedules.get(request.clinic, request.practitioner) {
+    let (schedule, outcome) = match schedules.get(request.clinic, request.practitioner).await? {
         None => (Schedule::new(shifts.clone()), HoursOutcome::Created),
         Some(mut schedule) => {
             let cut = request.hours.day_start(from);
@@ -96,7 +95,9 @@ where
             (schedule, HoursOutcome::Replaced)
         }
     };
-    schedules.save(request.clinic, request.practitioner, schedule);
+    schedules
+        .save(request.clinic, request.practitioner, schedule)
+        .await?;
 
     Ok(HoursSet {
         outcome,
@@ -106,7 +107,9 @@ where
 }
 
 /// Why [`set_weekly_hours`] refused to set the hours.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+///
+/// It isn't `Clone` or `PartialEq`, because a [`StorageError`] holds its cause as a boxed error.
+#[derive(Debug, Error)]
 pub enum SetHoursError {
     /// `from`, or the end of the horizon, is too close to the earliest or latest date chrono can
     /// represent.
@@ -115,4 +118,7 @@ pub enum SetHoursError {
     /// The new hours would leave a booked appointment outside them.
     #[error(transparent)]
     Hours(#[from] ReplaceHoursError),
+    /// The schedule couldn't be read or saved.
+    #[error(transparent)]
+    Storage(#[from] StorageError),
 }

@@ -30,7 +30,7 @@ async fn put_hours(app: axum::Router, practitioner: &str, body: Value) -> (Statu
 
 /// Asserts that `body` is refused with `status` and the error `code`.
 async fn assert_refused(body: Value, status: StatusCode, code: &str) {
-    let (actual, response) = put_hours(app(), "2", body).await;
+    let (actual, response) = put_hours(app().await, "2", body).await;
 
     assert_eq!(actual, status, "{response}");
     assert_eq!(response["error"], code, "{response}");
@@ -38,7 +38,7 @@ async fn assert_refused(body: Value, status: StatusCode, code: &str) {
 
 #[tokio::test]
 async fn hours_for_a_practitioner_without_a_schedule_are_created() {
-    let (status, body) = put_hours(app(), "2", santiago_mondays()).await;
+    let (status, body) = put_hours(app().await, "2", santiago_mondays()).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(
@@ -60,7 +60,7 @@ async fn hours_for_a_practitioner_without_a_schedule_are_created() {
 
 #[tokio::test]
 async fn the_same_put_again_is_200_with_the_same_body() {
-    let app = app();
+    let app = app().await;
     let (_, first) = put_hours(app.clone(), "2", santiago_mondays()).await;
 
     let (status, second) = put_hours(app, "2", santiago_mondays()).await;
@@ -71,7 +71,7 @@ async fn the_same_put_again_is_200_with_the_same_body() {
 
 #[tokio::test]
 async fn the_new_hours_take_bookings() {
-    let app = app();
+    let app = app().await;
     put_hours(app.clone(), "2", santiago_mondays()).await;
     let mut body = booking("2026-04-06T09:00:00-04:00");
     body["practitioner_id"] = json!(2);
@@ -84,7 +84,7 @@ async fn the_new_hours_take_bookings() {
 
 #[tokio::test]
 async fn shifts_before_from_and_their_appointments_are_kept() {
-    let app = app();
+    let app = app().await;
     let (status, _) = post(
         app.clone(),
         Some("1"),
@@ -120,7 +120,7 @@ async fn shifts_before_from_and_their_appointments_are_kept() {
 
 #[tokio::test]
 async fn hours_that_leave_a_booked_appointment_outside_are_409() {
-    let app = app();
+    let app = app().await;
     post(
         app.clone(),
         Some("1"),
@@ -154,7 +154,7 @@ async fn no_shifts_is_allowed_and_gives_no_hours() {
     let mut body = santiago_mondays();
     body["shifts"] = json!([]);
 
-    let (status, response) = put_hours(app(), "2", body).await;
+    let (status, response) = put_hours(app().await, "2", body).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(response["shifts"], json!([]));
@@ -165,7 +165,7 @@ async fn weekday_names_are_read_in_any_case_and_full() {
     let mut body = santiago_mondays();
     body["shifts"][0]["weekday"] = json!("monday");
 
-    let (status, response) = put_hours(app(), "2", body).await;
+    let (status, response) = put_hours(app().await, "2", body).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(response["shifts"].as_array().unwrap().len(), 4);
@@ -176,7 +176,7 @@ async fn an_unknown_time_zone_is_422() {
     let mut body = santiago_mondays();
     body["time_zone"] = json!("Mars/Olympus");
 
-    let (status, response) = put_hours(app(), "2", body).await;
+    let (status, response) = put_hours(app().await, "2", body).await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(
@@ -273,7 +273,7 @@ async fn missing_and_unknown_fields_are_422_invalid_body() {
 #[tokio::test]
 async fn an_id_that_is_not_a_whole_number_is_400() {
     for id in ["abc", "-1", "1.5"] {
-        let (status, body) = put_hours(app(), id, santiago_mondays()).await;
+        let (status, body) = put_hours(app().await, id, santiago_mondays()).await;
 
         assert_eq!(status, StatusCode::BAD_REQUEST, "{id}");
         assert_eq!(body["error"], "invalid_path", "{id}");
@@ -282,7 +282,13 @@ async fn an_id_that_is_not_a_whole_number_is_400() {
 
 #[tokio::test]
 async fn a_missing_clinic_header_is_400() {
-    let (status, body) = put(app(), None, &hours_uri("2"), santiago_mondays().to_string()).await;
+    let (status, body) = put(
+        app().await,
+        None,
+        &hours_uri("2"),
+        santiago_mondays().to_string(),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "missing_clinic_id");
@@ -290,7 +296,7 @@ async fn a_missing_clinic_header_is_400() {
 
 #[tokio::test]
 async fn hours_set_at_one_clinic_do_not_touch_another() {
-    let app = app();
+    let app = app().await;
 
     let (status, _) = put(
         app.clone(),

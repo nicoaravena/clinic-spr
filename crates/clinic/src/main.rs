@@ -1,5 +1,6 @@
 //! The clinic server, and the composition root: the one place that picks the adapters, builds the
-//! router from `clinic_api` and serves it.
+//! router from `clinic_api` and serves it. The adapters are named only here, in `seed`: the
+//! router is generic over them.
 //!
 //! Configuration comes from the environment:
 //!
@@ -42,7 +43,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let addr = listen_addr()?;
     let shutdown =
         shutdown_signal().map_err(|error| format!("can't listen for shutdown signals: {error}"))?;
-    let state = seed::demo_state()?;
+    let state = seed::demo_state().await?;
 
     let listener = TcpListener::bind(addr)
         .await

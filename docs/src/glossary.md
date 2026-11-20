@@ -71,6 +71,11 @@
   chooses, such as `FromRequestParts::Rejection`.
 - **`async fn`**: a function that returns a future instead of running. Its
   body runs when the future is polled and can pause at each `.await`.
+- **`async fn` in a trait**: a trait method that returns a future. Declared
+  as `fn get(..) -> impl Future<Output = ..> + Send` so callers know the
+  future is `Send`; an implementation can still write `async fn`. Each
+  implementation's future is a different type, so the trait isn't dyn
+  compatible.
 - **Binary crate**: a crate with a `main` function that compiles to a
   program you can run. `clinic` is one; `clinic-domain` is a library.
 - **Borrow checker**: the part of the compiler that enforces borrowing
@@ -91,6 +96,11 @@
   implementations, such as `Debug` or `PartialEq`, for a type.
 - **Derive macro**: a library-provided `derive`, such as `thiserror`'s
   `Error`, that generates code for a type at compile time.
+- **Dyn compatible**: a trait that can be used as a trait object
+  (`dyn Trait`), formerly called "object safe". A trait whose methods
+  return `impl Trait`, as async ones do, isn't: the compiler couldn't know
+  the size of what they return. Shown by a `compile_fail` doctest on
+  `clinic_app::ports`.
 - **Dynamic dispatch**: calling a method through a trait object
   (`&dyn Trait`), where the method to run is looked up at runtime. One
   compiled copy serves every type.
@@ -103,6 +113,10 @@
   `book_appointment<S: ScheduleRepository>`. The compiler makes one copy per
   concrete type used (*monomorphization*), so calls are dispatched
   statically.
+- **Error source**: the error that caused another one, returned by
+  `Error::source`. Following sources gives a chain, such as "storage failed:
+  connection refused". thiserror's `#[source]` and `#[from]` set it, and
+  `#[error(transparent)]` passes the inner error's message and source on.
 - **Ephemeral port**: a free port the OS picks when a program asks to
   listen on port 0. Tests use it so several servers can run at once.
 - **Golden file**: a file holding the exact output a program must produce.
@@ -144,8 +158,12 @@
   use it afterwards unless it cloned it first. `Schedule::book` moves the
   appointment type into the new appointment.
 - **`Mutex`**: a lock that lets one owner at a time reach a value. `lock()`
-  returns a guard, and dropping the guard unlocks. A mutex is *poisoned* if
-  a thread panics while holding it.
+  returns a guard, and dropping the guard unlocks. The standard library's
+  mutex is *poisoned* if a thread panics while holding it, and its guard
+  isn't `Send`, so it can't be held across an `.await` in a future that
+  must be `Send`. tokio's `Mutex` is locked with `.lock().await`, can be
+  held across `.await`, and isn't poisoned. The api crate uses tokio's since
+  step 3.1.
 - **Naive time**: chrono's `NaiveTime`, `NaiveDate` and `NaiveDateTime`: a
   clock or calendar reading with no time zone, so not yet an instant.
 - **Newtype**: a tuple struct with one field that wraps another type, to give
@@ -182,7 +200,9 @@
   be `Send`.
 - **`Sized` and `?Sized`**: `Sized` types have a size known at compile
   time. Type parameters are `Sized` unless marked `?Sized`, which lets them
-  be a trait object such as `dyn ScheduleRepository`.
+  be a trait object such as `dyn Error`, or `str`. The use cases had
+  `?Sized` bounds until step 3.1, when the ports stopped being dyn
+  compatible.
 - **Signal**: a message the OS sends a process. SIGINT is what Ctrl-C
   sends; SIGTERM is what `kill` and `docker stop` send. Both ask the
   `clinic` server to shut down gracefully.
@@ -194,6 +214,10 @@
   malformed JSON, 403 role not allowed, 404 no such practitioner in the
   path, 409 clashes with an existing appointment, 415 not JSON, 422
   well-formed but refused, 500 server fault.
+- **Storage error**: `StorageError`, what a port returns when its storage
+  can't be read or written. Its message is always "storage failed"; the
+  cause is its error source, logged by the server and never sent to a
+  client, which gets a 500.
 - **Trait**: a named set of methods, functions or constants that types can
   implement, such as `Capability`.
 - **Trait bound**: a requirement on a generic type, such as

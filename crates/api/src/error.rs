@@ -7,6 +7,12 @@
 //! ```
 //!
 //! `error` is a stable code that clients can match on. `message` is for people and may change.
+//!
+//! A failure on the server's side, such as storage that can't be reached, answers 500 with the
+//! code `internal` and the message `internal server error`. What went wrong is written to stderr
+//! for the operators, never sent to the client.
+
+use std::error::Error as _;
 
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
@@ -83,9 +89,6 @@ pub enum ApiError {
     /// Setting a practitioner's hours was refused.
     #[error(transparent)]
     Hours(#[from] SetHoursError),
-    /// Something went wrong on the server's side. The details aren't shown to the client.
-    #[error("internal server error")]
-    Internal,
 }
 
 impl ApiError {
@@ -109,17 +112,19 @@ impl ApiError {
                 | BookAppointmentError::Booking(
                     BookingError::OutOfRange | BookingError::OutsideWorkingHours,
                 ) => StatusCode::UNPROCESSABLE_ENTITY,
+                BookAppointmentError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
             },
             // The practitioner is the path, so a missing one is a missing resource. Booking names
             // the practitioner in its body instead, which is why it answers 422 above.
             Self::Agenda(AgendaError::UnknownPractitioner) => StatusCode::NOT_FOUND,
+            Self::Agenda(AgendaError::Storage(_)) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Hours(error) => match error {
                 SetHoursError::OutOfRange => StatusCode::UNPROCESSABLE_ENTITY,
                 SetHoursError::Hours(ReplaceHoursError::AppointmentOutsideHours { .. }) => {
                     StatusCode::CONFLICT
                 }
+                SetHoursError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
             },
-            Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -146,13 +151,15 @@ impl ApiError {
                     "outside_working_hours"
                 }
                 BookAppointmentError::Booking(BookingError::Overlaps { .. }) => "overlaps",
+                BookAppointmentError::Storage(_) => "internal",
             },
             Self::Agenda(AgendaError::UnknownPractitioner) => "unknown_practitioner",
+            Self::Agenda(AgendaError::Storage(_)) => "internal",
             Self::Hours(SetHoursError::OutOfRange) => "out_of_range",
             Self::Hours(SetHoursError::Hours(ReplaceHoursError::AppointmentOutsideHours {
                 ..
             })) => "appointment_outside_hours",
-            Self::Internal => "internal",
+            Self::Hours(SetHoursError::Storage(_)) => "internal",
         }
     }
 }
@@ -193,11 +200,32 @@ struct ErrorBody {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        let status = self.status();
+        let message = if status.is_server_error() {
+            // The details may name hosts, tables or bugs: they're for the operators, so they go to
+            // stderr and the client gets a fixed message.
+            eprintln!("clinic-api: {status}: {}", error_chain(&self));
+            "internal server error".to_owned()
+        } else {
+            self.to_string()
+        };
         let body = ErrorBody {
             error: self.code(),
-            message: self.to_string(),
+            message,
         };
 
-        (self.status(), Json(body)).into_response()
+        (status, Json(body)).into_response()
     }
+}
+
+/// `error`'s message followed by the message of each of its sources, joined by `": "`.
+fn error_chain(error: &ApiError) -> String {
+    let mut chain = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        chain.push_str(": ");
+        chain.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    chain
 }

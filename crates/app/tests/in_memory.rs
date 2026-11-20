@@ -21,79 +21,109 @@ fn consultation() -> AppointmentType {
     AppointmentType::new("Consultation", TimeDelta::minutes(30)).unwrap()
 }
 
-#[test]
-fn a_saved_schedule_can_be_read_back() {
+#[tokio::test]
+async fn a_saved_schedule_can_be_read_back() {
     let mut schedules = InMemorySchedules::new();
 
-    schedules.save(ClinicId::new(1), PractitionerId::new(1), mornings());
+    schedules
+        .save(ClinicId::new(1), PractitionerId::new(1), mornings())
+        .await
+        .unwrap();
 
     assert_eq!(
-        schedules.get(ClinicId::new(1), PractitionerId::new(1)),
+        schedules
+            .get(ClinicId::new(1), PractitionerId::new(1))
+            .await
+            .unwrap(),
         Some(mornings()),
     );
 }
 
-#[test]
-fn an_unknown_practitioner_has_no_schedule() {
+#[tokio::test]
+async fn an_unknown_practitioner_has_no_schedule() {
     let schedules = InMemorySchedules::new();
 
     assert_eq!(
-        schedules.get(ClinicId::new(1), PractitionerId::new(1)),
+        schedules
+            .get(ClinicId::new(1), PractitionerId::new(1))
+            .await
+            .unwrap(),
         None
     );
 }
 
-#[test]
-fn saving_again_replaces_the_schedule() {
+#[tokio::test]
+async fn saving_again_replaces_the_schedule() {
     let mut schedules = InMemorySchedules::new();
     let empty = Schedule::new(WorkingHours::new(Vec::new()).unwrap());
 
-    schedules.save(ClinicId::new(1), PractitionerId::new(1), mornings());
-    schedules.save(ClinicId::new(1), PractitionerId::new(1), empty.clone());
+    schedules
+        .save(ClinicId::new(1), PractitionerId::new(1), mornings())
+        .await
+        .unwrap();
+    schedules
+        .save(ClinicId::new(1), PractitionerId::new(1), empty.clone())
+        .await
+        .unwrap();
 
     assert_eq!(
-        schedules.get(ClinicId::new(1), PractitionerId::new(1)),
+        schedules
+            .get(ClinicId::new(1), PractitionerId::new(1))
+            .await
+            .unwrap(),
         Some(empty),
     );
 }
 
-#[test]
-fn a_schedule_is_invisible_to_another_clinic() {
+#[tokio::test]
+async fn a_schedule_is_invisible_to_another_clinic() {
     let mut schedules = InMemorySchedules::new();
 
-    schedules.save(ClinicId::new(1), PractitionerId::new(1), mornings());
+    schedules
+        .save(ClinicId::new(1), PractitionerId::new(1), mornings())
+        .await
+        .unwrap();
 
     // Same practitioner ID, different clinic.
     assert_eq!(
-        schedules.get(ClinicId::new(2), PractitionerId::new(1)),
+        schedules
+            .get(ClinicId::new(2), PractitionerId::new(1))
+            .await
+            .unwrap(),
         None
     );
 }
 
-#[test]
-fn an_added_appointment_type_can_be_found_by_name() {
+#[tokio::test]
+async fn an_added_appointment_type_can_be_found_by_name() {
     let mut types = InMemoryAppointmentTypes::new();
 
     types.add(ClinicId::new(1), consultation()).unwrap();
 
     assert_eq!(
-        types.find(ClinicId::new(1), "Consultation"),
+        types.find(ClinicId::new(1), "Consultation").await.unwrap(),
         Some(consultation()),
     );
-    assert_eq!(types.find(ClinicId::new(1), "Follow-up"), None);
+    assert_eq!(
+        types.find(ClinicId::new(1), "Follow-up").await.unwrap(),
+        None
+    );
 }
 
-#[test]
-fn an_appointment_type_is_invisible_to_another_clinic() {
+#[tokio::test]
+async fn an_appointment_type_is_invisible_to_another_clinic() {
     let mut types = InMemoryAppointmentTypes::new();
 
     types.add(ClinicId::new(1), consultation()).unwrap();
 
-    assert_eq!(types.find(ClinicId::new(2), "Consultation"), None);
+    assert_eq!(
+        types.find(ClinicId::new(2), "Consultation").await.unwrap(),
+        None
+    );
 }
 
-#[test]
-fn refuses_a_duplicate_name_within_a_clinic() {
+#[tokio::test]
+async fn refuses_a_duplicate_name_within_a_clinic() {
     let mut types = InMemoryAppointmentTypes::new();
     let longer = AppointmentType::new("Consultation", TimeDelta::minutes(45)).unwrap();
 
@@ -102,7 +132,7 @@ fn refuses_a_duplicate_name_within_a_clinic() {
 
     assert_eq!(error.name(), "Consultation");
     assert_eq!(
-        types.find(ClinicId::new(1), "Consultation"),
+        types.find(ClinicId::new(1), "Consultation").await.unwrap(),
         Some(consultation()),
         "the first type must be kept",
     );
