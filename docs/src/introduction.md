@@ -41,6 +41,29 @@ Until step 2.5, the same command printed a scripted day instead. The
 [interlude](steps/interlude-running-the-clinic.md) and the step pages up to
 2.3 show its output.
 
+## Running the database
+
+From step 3.3, part of the test suite runs against Postgres, which runs in a
+container. Once:
+
+```sh
+cp .env.example .env    # DATABASE_URL for the container
+```
+
+Then, before `cargo test`:
+
+```sh
+docker compose up -d --wait
+```
+
+The database tests fail rather than skip when Postgres isn't running. With
+`.env` present, `sqlx::query!` also checks its SQL against the database
+while compiling, so a build needs it too. `SQLX_OFFLINE=true` makes it use
+the committed `.sqlx/` cache instead. See [db](reference/db.md) for the
+sqlx-cli commands.
+
+`docker compose down` stops it; add `-v` to delete its data as well.
+
 ## Building the book
 
 You need [mdBook](https://rust-lang.github.io/mdBook/), installed once with:

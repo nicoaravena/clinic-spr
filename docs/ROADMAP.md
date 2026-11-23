@@ -21,7 +21,7 @@ Decisions:
 
 ## Progress
 
-Current step: **3.2**
+Current step: **3.3**
 
 ## How each step works
 
@@ -100,7 +100,8 @@ saving changes must be handled correctly.
 
 ### M3: Postgres with one schema per clinic
 
-- **Platform schema:** `platform.clinics` holds id, slug, schema name, plan and status.
+- **Platform schema:** `platform.clinics` holds id, slug, schema name and status. A plan column
+  comes when a plan changes what a clinic can do.
 - **Tenant schema:** each clinic gets `clinic_<id>` with its own tables. Provisioning a clinic
   creates the schema and runs the tenant migrations.
 - **Enforced access:** the only way to get a tenant connection is `TenantDb::begin(&ClinicId)`,

@@ -2,7 +2,7 @@
 
 ## Crates
 
-Today the workspace has four crates. The roadmap adds the others when they
+Today the workspace has five crates. The roadmap adds the others when they
 are needed:
 
 | Crate | Holds | Arrives in |
@@ -11,10 +11,11 @@ are needed:
 | `crates/clinic` (`clinic`) | the binary and composition root: the HTTP server; see [clinic](clinic.md) | M1 (now) |
 | `crates/app` (`clinic-app`) | use cases, ports (repository traits) and in-memory adapters; see [app](app.md) | 2.1 (now) |
 | `crates/api` (`clinic-api`) | axum router and handlers, as a library; see [api](api.md) | 2.4 (now) |
-| `crates/db` | sqlx adapters, migrations, tenant access | M3 |
+| `crates/db` (`clinic-db`) | the Postgres pool, migrations, the platform schema and, from 3.4, tenant access; see [db](db.md) | 3.3 (now) |
 
 Dependencies point inward: `api -> app -> domain` and `db -> app -> domain`.
-Only `clinic` depends on all of them, to wire them together.
+Only `clinic` depends on all of them, to wire them together (on `db` from
+step 3.7, when the server moves to Postgres).
 The domain depends on nothing else in the workspace, and `app` depends only
 on the domain. The domain's only external
 dependencies are `chrono`, without the system clock, and `thiserror`, which
@@ -22,7 +23,8 @@ generates error boilerplate at compile time. `app` adds `chrono-tz`, and tokio's
 storage's lock. Only
 `api` uses `serde`, and it defines every route with `axum`. `clinic` uses
 `axum` only to serve the router, and it's the only crate that starts a tokio
-runtime.
+runtime. Only `db` uses `sqlx`, so neither the domain, the use cases nor the
+handlers know there's a database.
 
 ## Rules that hold across the domain
 
@@ -49,6 +51,7 @@ runtime.
 | [schedule](schedule.md) | `Schedule`, `Appointment` (in `appointment`) | 1.6 |
 | [access](access.md) | `Role`, `Capability`, `ClinicalAccess` | 1.7 |
 | [clinical_note](clinical_note.md) | `ClinicalNote`, `NoteVersion` | 1.8 |
+| [clinic](clinic_entity.md) | `Clinic`, `Slug`, `ClinicStatus` | 3.3 |
 
 ## API docs
 

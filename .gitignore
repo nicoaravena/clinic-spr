@@ -18,3 +18,6 @@ rustc-ice-*.txt
 
 # mdBook build output
 public/
+
+# Local environment; see .env.example
+.env

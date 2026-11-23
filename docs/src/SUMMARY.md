@@ -23,6 +23,7 @@
   - [2.6 Setting weekly hours over HTTP](steps/2.6-weekly-hours-endpoint.md)
   - [3.1 Async, fallible ports](steps/3.1-async-ports.md)
   - [3.2 Tenant sessions](steps/3.2-tenant-sessions.md)
+  - [3.3 The db crate and Postgres](steps/3.3-db-crate.md)
 
 # Reference
 
@@ -35,8 +36,10 @@
   - [schedule](reference/schedule.md)
   - [access](reference/access.md)
   - [clinical_note](reference/clinical_note.md)
+  - [clinic (module)](reference/clinic_entity.md)
   - [app (crate)](reference/app.md)
   - [api (crate)](reference/api.md)
+  - [db (crate)](reference/db.md)
   - [clinic (binary)](reference/clinic.md)
 
 ---

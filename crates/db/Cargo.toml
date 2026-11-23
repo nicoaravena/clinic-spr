@@ -1,0 +1,12 @@
+[package]
+name = "clinic-db"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clinic-app = { path = "../app" }
+clinic-domain = { path = "../domain" }
+sqlx = { version = "0.9", default-features = false, features = ["macros", "migrate", "postgres", "runtime-tokio"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }

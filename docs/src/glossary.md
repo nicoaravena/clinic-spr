@@ -17,6 +17,8 @@
   the access asks for it as a parameter.
 - **Clinic**: one customer of the platform, and one tenant. Its data must be
   invisible to every other clinic.
+- **Clinic status**: whether a clinic may be used: active, or suspended by
+  the platform.
 - **Clinical content**: clinical notes and other medical information about a
   patient. Only practitioners may read or write it.
 - **Clinical note**: a practitioner's note about a patient. It is never
@@ -44,6 +46,9 @@
 - **Skipped local time**: a clock reading that never happens, because the
   clocks jumped forward over it. A weekly shift reads it as the instant the
   clocks jump to.
+- **Slug**: the short name a clinic is known by, such as `centro-norte`:
+  lowercase letters and digits joined by single hyphens, at most 63 bytes.
+  Unique across the platform.
 - **Slot (time slot)**: a span of time with a start (included) and an end
   (excluded).
 - **Tenant**: a customer whose data is kept apart from every other
@@ -78,6 +83,9 @@
   compatible.
 - **Binary crate**: a crate with a `main` function that compiles to a
   program you can run. `clinic` is one; `clinic-domain` is a library.
+- **Build script**: `build.rs`, a program Cargo compiles and runs before
+  compiling its crate. The db crate's tells Cargo to rebuild when a
+  migration changes.
 - **Borrow checker**: the part of the compiler that enforces borrowing
   rules: many `&` or one `&mut` at a time, and no reference outliving its
   value.
@@ -89,6 +97,9 @@
 - **Composition root**: the one place where the app's parts are created
   and wired together. Here, `main` in `crates/clinic`: it picks the
   in-memory adapters, builds the router and serves it.
+- **Connection pool**: a set of open database connections that queries
+  borrow and give back, so each query doesn't pay for a new connection.
+  sqlx's `PgPool` is one; its clones share the same connections.
 - **Crate**: the unit Rust compiles: a library or a binary. `clinic-domain`
   is a library crate.
 - **Data transfer object (DTO)**: a type that describes a wire format and
@@ -113,6 +124,8 @@
 - **Extractor**: a type that axum builds from a request before calling a
   handler, such as `Json<T>`, `State<T>` or `ClinicHeader`. If it can't, its
   rejection becomes the response.
+- **Fixture**: data loaded into a test's database before the test runs,
+  such as `crates/db/tests/fixtures/clinics.sql`.
 - **Future**: a value that represents work in progress. It does nothing
   until a runtime polls it, and each poll runs it to its next `.await`.
 - **Generic**: a function or type with a type parameter, such as
@@ -172,15 +185,24 @@
   `Arc<Mutex<_>>` and returns an `OwnedMutexGuard`, which borrows nothing
   and can be kept in a struct. The api crate used tokio's in step 3.1; the
   in-memory storage uses it from step 3.2.
+- **Migration**: a versioned SQL file that changes the database schema one
+  step. sqlx's `migrate!` embeds them in the binary, and `Migrator::run`
+  applies the ones not yet recorded in `_sqlx_migrations`.
 - **Naive time**: chrono's `NaiveTime`, `NaiveDate` and `NaiveDateTime`: a
   clock or calendar reading with no time zone, so not yet an instant.
 - **Newtype**: a tuple struct with one field that wraps another type, to give
   it a distinct type and its own rules. `ClinicId(u64)` is one.
+- **Offline query cache**: the `.sqlx/` directory, where
+  `cargo sqlx prepare` saves what the database said about each `query!`,
+  so the workspace builds without a database. Committed.
 - **Parsing at the edge**: turning text from outside, such as a time
   zone name, into a typed value as soon as it arrives, in the delivery
   layer. The use cases and the domain only ever see the type.
 - **Path parameter**: a part of a route's path that varies, such as `{id}`
   in `/practitioners/{id}/agenda`. axum's `Path` extractor reads it.
+- **Platform schema**: the Postgres schema `platform`, which holds what
+  the platform knows about every clinic, such as `platform.clinics`. Each
+  clinic's own data lives in its own schema instead.
 - **Port**: a trait that says what a use case needs from the outside world,
   without saying how it is done, such as `ScheduleRepository`.
 - **Precise capturing**: `+ use<'a>` on an `impl Trait` return type, which
@@ -191,6 +213,9 @@
   it replaced.
 - **Query**: a use case that only reads, such as `practitioner_agenda`. It
   takes its ports by `&` and never saves.
+- **`query!`**: sqlx's macro that checks a SQL statement against the
+  database while the crate compiles, and returns rows as a struct with
+  one typed field per column.
 - **Query string**: the part of a URL after `?`, such as
   `from=...&to=...`. axum's `Query` extractor reads it into a struct. In
   it, `+` means a space, so a literal `+` is sent as `%2B`.
@@ -204,6 +229,12 @@
   on threads. Rust doesn't ship one; this project uses tokio.
 - **`?` operator**: unwraps an `Ok` or `Some`, or returns the `Err` or
   `None` from the current function early.
+- **Schema (Postgres)**: a namespace inside a database that holds tables.
+  `platform.clinics` is the table `clinics` in the schema `platform`. Here
+  each clinic gets one, `clinic_<id>`.
+- **Schema name**: `SchemaName`, the name of a clinic's schema,
+  `clinic_<id>`. Built only from a `ClinicId`, because a schema name is
+  written into SQL text and can't be bound as a parameter.
 - **`Send` and `Sync`**: `Send` means a value may move to another thread;
   `Sync` means it may be shared by reference between threads. The compiler
   works them out from a type's fields. axum requires handlers' futures to
@@ -219,6 +250,12 @@
 - **Smart constructor**: a function such as `new` or `parse` that checks its
   input and is the only way to build a type. Combined with private fields,
   it makes invalid values impossible to represent.
+- **SQL injection**: input that changes the meaning of a SQL statement
+  because it was pasted into the SQL text. Bound parameters (`$1`) prevent
+  it; sqlx 0.9 refuses SQL built at run time unless it's wrapped in
+  `AssertSqlSafe`.
+- **SQLSTATE**: the five-character code of a Postgres error, such as
+  `23505` (unique violation) or `23514` (check violation).
 - **Status code**: the number at the start of an HTTP response. Here: 200
   read or replaced, 201 booked or created, 400 bad header, path, query or
   malformed JSON, 403 role not allowed, 404 no such practitioner in the
@@ -232,6 +269,9 @@
   can't be read or written. Its message is always "storage failed"; the
   cause is its error source, logged by the server and never sent to a
   client, which gets a 500.
+- **Test database**: a database `#[sqlx::test]` creates for one test,
+  migrates and drops when it passes, so database tests run in parallel
+  without seeing each other's rows.
 - **Trait**: a named set of methods, functions or constants that types can
   implement, such as `Capability`.
 - **Trait bound**: a requirement on a generic type, such as
@@ -239,6 +279,8 @@
 - **Trait object**: `dyn Trait`, a value whose concrete type is known only
   at runtime, used behind a pointer such as `Box`. `Box<dyn Error>` holds
   any error.
+- **`TryFrom`**: `From` for conversions that can fail, returning a
+  `Result`. `i64::try_from(u64)` fails above `i64::MAX`.
 - **Unit of work**: a group of reads and writes that succeed or fail
   together. A use case's session is one.
 - **Use case**: one thing the application does for a user, such as
